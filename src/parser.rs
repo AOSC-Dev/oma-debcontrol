@@ -80,13 +80,10 @@ fn field_definition(input: &str) -> IResult<&str, Field> {
 }
 
 pub(crate) fn paragraph(input: &str) -> IResult<&str, Option<Paragraph>> {
-    opt(map(
-        preceded(
-            many0_count(alt((blank_line, comment_line))),
-            many1(field_definition),
-        ),
-        Paragraph::new,
-    ))(input)
+    preceded(
+        many0_count(alt((blank_line, comment_line))),
+        opt(map(many1(field_definition), Paragraph::new)),
+    )(input)
 }
 
 #[cfg(test)]
@@ -367,6 +364,28 @@ mod tests {
                 item,
                 Some(Paragraph::new(vec![Field::new("field", "value")]))
             );
+            assert_eq!(rest, "");
+        }
+
+        #[test]
+        fn should_return_none_for_input_without_a_paragraph() {
+            let (rest, item) = paragraph(indoc!(
+                "
+                \t
+                # comment
+                
+                # comment
+                
+                
+                \t\t  \n
+                
+                # comment
+                
+                
+                "
+            ))
+            .unwrap();
+            assert_eq!(item, None);
             assert_eq!(rest, "");
         }
     }
