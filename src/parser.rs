@@ -118,7 +118,6 @@ where
 mod tests {
     use super::*;
     use crate::tests::field;
-    use alloc::string::ToString;
     use indoc::indoc;
     use nom::error::ErrorKind;
 

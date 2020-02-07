@@ -1,10 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
-
 use alloc::{string::String, vec::Vec};
-#[cfg(feature = "std")]
-use thiserror::Error;
+use core::fmt;
+use nom::error::{convert_error, ErrorKind, VerboseError};
 
 mod parser;
 
@@ -25,12 +24,31 @@ impl Paragraph<'_> {
     }
 }
 
+#[cfg(not(feature = "verbose-errors"))]
+type ErrorType<'a> = (&'a str, ErrorKind);
+#[cfg(feature = "verbose-errors")]
+type ErrorType<'a> = VerboseError<&'a str>;
+
 #[derive(Debug)]
-#[cfg_attr(feature = "std", derive(Error))]
-pub enum Error {
-    #[cfg_attr(feature = "std", error("no paragraph in input"))]
-    EmptyInput,
+pub struct Error<'a> {
+    input: &'a str,
+    error: ErrorType<'a>,
 }
+
+impl<'a> fmt::Display for Error<'a> {
+    #[cfg(not(feature = "verbose-errors"))]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} at '{}'", self.error.1.description(), self.error.0)
+    }
+
+    #[cfg(feature = "verbose-errors")]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", convert_error(self.input, self.error.clone()))
+    }
+}
+
+#[cfg(feature = "std")]
+impl<'a> std::error::Error for Error<'a> {}
 
 pub fn parse(input: &str) -> Result<(Option<Paragraph>, &str), Error> {
     todo!()
