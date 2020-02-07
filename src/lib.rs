@@ -50,8 +50,13 @@ impl<'a> fmt::Display for Error<'a> {
 #[cfg(feature = "std")]
 impl<'a> std::error::Error for Error<'a> {}
 
-pub fn parse(input: &str) -> Result<(Option<Paragraph>, &str), Error> {
-    todo!()
+pub fn parse(input: &str) -> Result<(&str, Option<Paragraph>), Error> {
+    match parser::paragraph::<ErrorType>(input) {
+        Ok((rest, item)) => Ok((rest, item)),
+        Err(nom::Err::Error(error)) => Err(Error { input, error }),
+        Err(nom::Err::Failure(error)) => Err(Error { input, error }),
+        Err(nom::Err::Incomplete(_)) => unimplemented!(),
+    }
 }
 
 #[cfg(test)]
@@ -69,11 +74,11 @@ mod tests {
 
     #[test]
     fn should_parse_simple_paragraph() {
-        let (item, rest) = parse(indoc!(
+        let (rest, item) = parse(indoc!(
             "
             field: value
-            field 2: value 2
-            field 3: value 3
+            field2: value 2
+            field3: value 3
             "
         ))
         .unwrap();
@@ -81,8 +86,8 @@ mod tests {
             item,
             Some(Paragraph::new(vec![
                 field("field", "value"),
-                field("field 2", "value 2"),
-                field("field 3", "value 3"),
+                field("field2", "value 2"),
+                field("field3", "value 3"),
             ]))
         );
         assert_eq!(rest, "");
