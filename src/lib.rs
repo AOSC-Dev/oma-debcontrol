@@ -63,11 +63,11 @@ mod tests {
         .unwrap();
         assert_eq!(
             item,
-            Paragraph::new(vec![
+            Some(Paragraph::new(vec![
                 Field::new("field", "value"),
                 Field::new("field 2", "value 2"),
                 Field::new("field 3", "value 3"),
-            ])
+            ]))
         );
         assert_eq!(rest, "");
     }

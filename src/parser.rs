@@ -79,14 +79,14 @@ fn field_definition(input: &str) -> IResult<&str, Field> {
     )(input)
 }
 
-pub(crate) fn paragraph(input: &str) -> IResult<&str, Paragraph> {
-    map(
+pub(crate) fn paragraph(input: &str) -> IResult<&str, Option<Paragraph>> {
+    opt(map(
         preceded(
             many0_count(alt((blank_line, comment_line))),
             many1(field_definition),
         ),
         Paragraph::new,
-    )(input)
+    ))(input)
 }
 
 #[cfg(test)]
@@ -206,11 +206,11 @@ mod tests {
             .unwrap();
             assert_eq!(
                 item,
-                Paragraph::new(vec![
+                Some(Paragraph::new(vec![
                     Field::new("field1", "value"),
                     Field::new("field2", "value"),
                     Field::new("field3", "value"),
-                ])
+                ]))
             );
             assert_eq!(rest, "");
         }
@@ -234,12 +234,12 @@ mod tests {
             .unwrap();
             assert_eq!(
                 item,
-                Paragraph::new(vec![
+                Some(Paragraph::new(vec![
                     Field::new("field1", "value\nline2\nline3"),
                     Field::new("field2", "value\nline2"),
                     Field::new("field3", "value"),
                     Field::new("field4", "value\nline2"),
-                ])
+                ]))
             );
             assert_eq!(rest, "\n\n");
         }
@@ -262,11 +262,11 @@ mod tests {
             .unwrap();
             assert_eq!(
                 item,
-                Paragraph::new(vec![
+                Some(Paragraph::new(vec![
                     Field::new("field1", "value"),
                     Field::new("field2", "value\nline2"),
                     Field::new("field3", "value"),
-                ])
+                ]))
             );
             assert_eq!(rest, "");
         }
@@ -290,11 +290,11 @@ mod tests {
             .unwrap();
             assert_eq!(
                 item,
-                Paragraph::new(vec![
+                Some(Paragraph::new(vec![
                     Field::new("field", "value"),
                     Field::new("field", "value"),
                     Field::new("field", "value\nanother line"),
-                ])
+                ]))
             );
             assert_eq!(
                 rest,
@@ -325,10 +325,10 @@ mod tests {
             .unwrap();
             assert_eq!(
                 item,
-                Paragraph::new(vec![
+                Some(Paragraph::new(vec![
                     Field::new("field", "value"),
                     Field::new("field2", "value2\nline2"),
-                ])
+                ]))
             );
             assert_eq!(rest, "");
         }
@@ -342,7 +342,10 @@ mod tests {
                 "
             ))
             .unwrap();
-            assert_eq!(item, Paragraph::new(vec![Field::new("field", "value"),]));
+            assert_eq!(
+                item,
+                Some(Paragraph::new(vec![Field::new("field", "value")]))
+            );
             assert_eq!(rest, "");
         }
 
@@ -360,7 +363,10 @@ mod tests {
                 "
             ))
             .unwrap();
-            assert_eq!(item, Paragraph::new(vec![Field::new("field", "value"),]));
+            assert_eq!(
+                item,
+                Some(Paragraph::new(vec![Field::new("field", "value")]))
+            );
             assert_eq!(rest, "");
         }
     }
