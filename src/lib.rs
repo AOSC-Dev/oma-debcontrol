@@ -1,8 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
-use alloc::string::{String, ToString};
-use alloc::vec::Vec;
+
+use alloc::{string::String, vec::Vec};
 #[cfg(feature = "std")]
 use thiserror::Error;
 
@@ -12,15 +12,6 @@ mod parser;
 pub struct Field<'a> {
     pub name: &'a str,
     pub value: String,
-}
-
-impl Field<'_> {
-    fn new<'a>(name: &'a str, value: &'a str) -> Field<'a> {
-        Field {
-            name,
-            value: value.to_string(),
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -48,8 +39,15 @@ pub fn parse(input: &str) -> Result<(Option<Paragraph>, &str), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::vec;
+    use alloc::{string::ToString, vec};
     use indoc::indoc;
+
+    pub(crate) fn field<'a>(name: &'a str, value: &'a str) -> Field<'a> {
+        Field {
+            name,
+            value: value.to_string(),
+        }
+    }
 
     #[test]
     fn should_parse_simple_paragraph() {
@@ -64,9 +62,9 @@ mod tests {
         assert_eq!(
             item,
             Some(Paragraph::new(vec![
-                Field::new("field", "value"),
-                Field::new("field 2", "value 2"),
-                Field::new("field 3", "value 3"),
+                field("field", "value"),
+                field("field 2", "value 2"),
+                field("field 3", "value 3"),
             ]))
         );
         assert_eq!(rest, "");
