@@ -1,0 +1,21 @@
+[package]
+name = "debcontrol"
+version = "0.1.0"
+authors = ["Felix Krull <f_krull@gmx.de>"]
+edition = "2018"
+
+[features]
+std = ["nom/std", "thiserror"]
+default = ["std"]
+
+[dependencies.nom]
+version = "5.1.0"
+default-features = false
+features = ["alloc"]
+
+[dependencies.thiserror]
+version = "1.0.10"
+optional = true
+
+[dev-dependencies.indoc]
+version = "0.3.4"
