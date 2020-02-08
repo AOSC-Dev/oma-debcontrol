@@ -17,7 +17,7 @@ fn is_field_name_char(c: char) -> bool {
 }
 
 fn starts_with_valid_char(name: &str) -> bool {
-    !name.starts_with("#") && !name.starts_with("-")
+    !name.starts_with('#') && !name.starts_with('-')
 }
 
 fn field_name<'a, E>(input: &'a str) -> IResult<&'a str, &'a str, E>
@@ -91,12 +91,9 @@ where
 fn field_from_parts<'a>(parts: (FieldDefinition<'a>, Vec<Line<'a>>)) -> Field<'a> {
     let mut value = String::from(parts.0.value);
     for line in parts.1 {
-        match line {
-            Line::Continuation(line) => {
-                value.push('\n');
-                value.push_str(line);
-            }
-            _ => {}
+        if let Line::Continuation(line) = line {
+            value.push('\n');
+            value.push_str(line);
         }
     }
     Field {
@@ -125,7 +122,7 @@ fn eof<'a, E>(input: &'a str) -> IResult<&'a str, (), E>
 where
     E: ParseError<&'a str>,
 {
-    if input.len() == 0 {
+    if input.is_empty() {
         Ok((input, ()))
     } else {
         Err(Error(make_error(input, ErrorKind::Eof)))
