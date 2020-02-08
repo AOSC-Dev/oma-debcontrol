@@ -4,10 +4,11 @@ use nom::{
     branch::alt,
     bytes::complete::take_while1,
     character::complete::{char, line_ending, not_line_ending, space0, space1},
-    combinator::{complete, map, opt, rest, verify},
-    error::ParseError,
+    combinator::{complete, cut, map, opt, verify},
+    error::{context, make_error, ErrorKind, ParseError},
     multi::{many0, many0_count, many1},
     sequence::{pair, preceded, separated_pair, terminated, tuple},
+    Err::Error,
     IResult,
 };
 
@@ -40,11 +41,19 @@ where
     terminated(not_line_ending, opt(line_ending))(input)
 }
 
-fn field_definition_line<'a, E>(input: &'a str) -> IResult<&'a str, (&'a str, &'a str), E>
+struct FieldDefinition<'a> {
+    name: &'a str,
+    value: &'a str,
+}
+
+fn field_definition_line<'a, E>(input: &'a str) -> IResult<&'a str, FieldDefinition<'a>, E>
 where
     E: ParseError<&'a str>,
 {
-    separated_pair(field_name, colon_and_whitespace, field_value)(input)
+    map(
+        separated_pair(field_name, cut(colon_and_whitespace), cut(field_value)),
+        |(name, value)| FieldDefinition { name, value },
+    )(input)
 }
 
 enum Line<'a> {
@@ -79,29 +88,48 @@ where
     map(terminated(space0, line_ending), |_| Line::Blank)(input)
 }
 
+fn field_from_parts<'a>(parts: (FieldDefinition<'a>, Vec<Line<'a>>)) -> Field<'a> {
+    let mut value = String::from(parts.0.value);
+    for line in parts.1 {
+        match line {
+            Line::Continuation(line) => {
+                value.push('\n');
+                value.push_str(line);
+            }
+            _ => {}
+        }
+    }
+    Field {
+        name: parts.0.name,
+        value,
+    }
+}
+
 fn field_definition<'a, E>(input: &'a str) -> IResult<&'a str, Field<'a>, E>
 where
     E: ParseError<&'a str>,
 {
-    map(
-        pair(
-            field_definition_line,
-            many0(alt((continuation_line, comment_line))),
+    context(
+        "field definition",
+        map(
+            pair(
+                field_definition_line,
+                many0(alt((continuation_line, comment_line))),
+            ),
+            field_from_parts,
         ),
-        |((name, first_line), more_lines)| {
-            let mut s = String::from(first_line);
-            for line in more_lines {
-                match line {
-                    Line::Continuation(value) => {
-                        s.push('\n');
-                        s.push_str(value);
-                    }
-                    _ => {}
-                }
-            }
-            Field { name, value: s }
-        },
     )(input)
+}
+
+fn eof<'a, E>(input: &'a str) -> IResult<&'a str, (), E>
+where
+    E: ParseError<&'a str>,
+{
+    if input.len() == 0 {
+        Ok((input, ()))
+    } else {
+        Err(Error(make_error(input, ErrorKind::Eof)))
+    }
 }
 
 pub(crate) fn paragraph<'a, E>(input: &'a str) -> IResult<&'a str, Option<Paragraph>, E>
@@ -112,10 +140,7 @@ where
         many0_count(alt((blank_line, comment_line))),
         terminated(
             opt(map(many1(field_definition), Paragraph::new)),
-            alt((
-                map(blank_line, |_| ()),
-                map(verify(rest, |rest: &str| rest.len() == 0), |_| ()),
-            )),
+            context("paragraph terminator", alt((map(blank_line, |_| ()), eof))),
         ),
     ))(input)
 }
