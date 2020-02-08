@@ -53,7 +53,7 @@ impl<'a> fmt::Display for Error<'a> {
 #[cfg(feature = "std")]
 impl<'a> std::error::Error for Error<'a> {}
 
-pub fn parse(input: &str) -> Result<(&str, Option<Paragraph>), Error> {
+pub fn next_paragraph(input: &str) -> Result<(&str, Option<Paragraph>), Error> {
     match parser::paragraph::<ErrorType>(input) {
         Ok((rest, item)) => Ok((rest, item)),
         Err(nom::Err::Error(error)) => Err(Error { input, error }),
@@ -65,8 +65,7 @@ pub fn parse(input: &str) -> Result<(&str, Option<Paragraph>), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::{string::ToString, vec};
-    use indoc::indoc;
+    use alloc::string::ToString;
 
     pub(crate) fn field<'a>(name: &'a str, value: &'a str) -> Field<'a> {
         Field {
@@ -75,54 +74,59 @@ mod tests {
         }
     }
 
-    #[test]
-    fn should_parse_simple_paragraph() {
-        let (rest, item) = parse(indoc!(
-            "
+    mod next_paragraph {
+        use super::*;
+        use alloc::vec;
+        use indoc::indoc;
+
+        #[test]
+        fn should_parse_simple_paragraph() {
+            let (rest, item) = next_paragraph(indoc!(
+                "
             field: value
             field2: value 2
             field3: value 3"
-        ))
-        .unwrap();
-        assert_eq!(
-            item,
-            Some(Paragraph::new(vec![
-                field("field", "value"),
-                field("field2", "value 2"),
-                field("field3", "value 3"),
-            ]))
-        );
-        assert_eq!(rest, "");
-    }
+            ))
+            .unwrap();
+            assert_eq!(
+                item,
+                Some(Paragraph::new(vec![
+                    field("field", "value"),
+                    field("field2", "value 2"),
+                    field("field3", "value 3"),
+                ]))
+            );
+            assert_eq!(rest, "");
+        }
 
-    #[test]
-    fn should_fail_on_incomplete_line() {
-        let result = parse(indoc!(
-            "
+        #[test]
+        fn should_fail_on_incomplete_line() {
+            let result = next_paragraph(indoc!(
+                "
             field: value
              continuation
             incomplete-line
             "
-        ));
-        assert!(result.is_err());
-    }
+            ));
+            assert!(result.is_err());
+        }
 
-    #[test]
-    fn should_fail_on_unexpected_continuation() {
-        let result = parse(indoc!(
-            "
+        #[test]
+        fn should_fail_on_unexpected_continuation() {
+            let result = next_paragraph(indoc!(
+                "
             
              continuation
             field: value
             "
-        ));
-        assert!(result.is_err());
-    }
+            ));
+            assert!(result.is_err());
+        }
 
-    #[test]
-    fn should_parse_paragraph_with_continuation_lines() {
-        let (rest, item) = parse(indoc!(
-            "
+        #[test]
+        fn should_parse_paragraph_with_continuation_lines() {
+            let (rest, item) = next_paragraph(indoc!(
+                "
             field1: value
              line2
              line3
@@ -134,24 +138,24 @@ mod tests {
 
 
             "
-        ))
-        .unwrap();
-        assert_eq!(
-            item,
-            Some(Paragraph::new(vec![
-                field("field1", "value\nline2\nline3"),
-                field("field2", "value\nline2"),
-                field("field3", "value"),
-                field("field4", "value\nline2"),
-            ]))
-        );
-        assert_eq!(rest, "\n");
-    }
+            ))
+            .unwrap();
+            assert_eq!(
+                item,
+                Some(Paragraph::new(vec![
+                    field("field1", "value\nline2\nline3"),
+                    field("field2", "value\nline2"),
+                    field("field3", "value"),
+                    field("field4", "value\nline2"),
+                ]))
+            );
+            assert_eq!(rest, "\n");
+        }
 
-    #[test]
-    fn should_parse_paragraph_with_comment_lines() {
-        let (rest, item) = parse(indoc!(
-            "
+        #[test]
+        fn should_parse_paragraph_with_comment_lines() {
+            let (rest, item) = next_paragraph(indoc!(
+                "
             field1: value
             # comment
             field2: value
@@ -162,23 +166,23 @@ mod tests {
             # more comments
             field3: value
             "
-        ))
-        .unwrap();
-        assert_eq!(
-            item,
-            Some(Paragraph::new(vec![
-                field("field1", "value"),
-                field("field2", "value\nline2"),
-                field("field3", "value"),
-            ]))
-        );
-        assert_eq!(rest, "");
-    }
+            ))
+            .unwrap();
+            assert_eq!(
+                item,
+                Some(Paragraph::new(vec![
+                    field("field1", "value"),
+                    field("field2", "value\nline2"),
+                    field("field3", "value"),
+                ]))
+            );
+            assert_eq!(rest, "");
+        }
 
-    #[test]
-    fn should_parse_one_of_multiple_paragraphs() {
-        let (rest, item) = parse(indoc!(
-            "
+        #[test]
+        fn should_parse_one_of_multiple_paragraphs() {
+            let (rest, item) = next_paragraph(indoc!(
+                "
             field: value
             field: value
             # comment
@@ -190,32 +194,32 @@ mod tests {
             # more stuff
             field: value
             "
-        ))
-        .unwrap();
-        assert_eq!(
-            item,
-            Some(Paragraph::new(vec![
-                field("field", "value"),
-                field("field", "value"),
-                field("field", "value\nanother line"),
-            ]))
-        );
-        assert_eq!(
-            rest,
-            indoc!(
-                "
+            ))
+            .unwrap();
+            assert_eq!(
+                item,
+                Some(Paragraph::new(vec![
+                    field("field", "value"),
+                    field("field", "value"),
+                    field("field", "value\nanother line"),
+                ]))
+            );
+            assert_eq!(
+                rest,
+                indoc!(
+                    "
                 another: paragraph
                 # more stuff
                 field: value
                 "
-            )
-        );
-    }
+                )
+            );
+        }
 
-    #[test]
-    fn should_parse_paragraph_with_leading_whitespace() {
-        let (rest, item) = parse(indoc!(
-            "
+        #[test]
+        fn should_parse_paragraph_with_leading_whitespace() {
+            let (rest, item) = next_paragraph(indoc!(
+                "
 
             \t\t
               \t
@@ -224,35 +228,35 @@ mod tests {
             field2: value2
              line2
             "
-        ))
-        .unwrap();
-        assert_eq!(
-            item,
-            Some(Paragraph::new(vec![
-                field("field", "value"),
-                field("field2", "value2\nline2"),
-            ]))
-        );
-        assert_eq!(rest, "");
-    }
+            ))
+            .unwrap();
+            assert_eq!(
+                item,
+                Some(Paragraph::new(vec![
+                    field("field", "value"),
+                    field("field2", "value2\nline2"),
+                ]))
+            );
+            assert_eq!(rest, "");
+        }
 
-    #[test]
-    fn should_parse_paragraph_with_leading_comments() {
-        let (rest, item) = parse(indoc!(
-            "
+        #[test]
+        fn should_parse_paragraph_with_leading_comments() {
+            let (rest, item) = next_paragraph(indoc!(
+                "
             # comment
             field: value
             "
-        ))
-        .unwrap();
-        assert_eq!(item, Some(Paragraph::new(vec![field("field", "value")])));
-        assert_eq!(rest, "");
-    }
+            ))
+            .unwrap();
+            assert_eq!(item, Some(Paragraph::new(vec![field("field", "value")])));
+            assert_eq!(rest, "");
+        }
 
-    #[test]
-    fn should_parse_paragraph_with_leading_whitespace_and_comments() {
-        let (rest, item) = parse(indoc!(
-            "
+        #[test]
+        fn should_parse_paragraph_with_leading_whitespace_and_comments() {
+            let (rest, item) = next_paragraph(indoc!(
+                "
 
             \t
             # comment
@@ -261,16 +265,16 @@ mod tests {
 
             field: value
             "
-        ))
-        .unwrap();
-        assert_eq!(item, Some(Paragraph::new(vec![field("field", "value")])));
-        assert_eq!(rest, "");
-    }
+            ))
+            .unwrap();
+            assert_eq!(item, Some(Paragraph::new(vec![field("field", "value")])));
+            assert_eq!(rest, "");
+        }
 
-    #[test]
-    fn should_return_none_for_input_without_a_paragraph() {
-        let (rest, item) = parse(indoc!(
-            "
+        #[test]
+        fn should_return_none_for_input_without_a_paragraph() {
+            let (rest, item) = next_paragraph(indoc!(
+                "
             \t
             # comment
 
@@ -283,16 +287,17 @@ mod tests {
 
 
             "
-        ))
-        .unwrap();
-        assert_eq!(item, None);
-        assert_eq!(rest, "");
-    }
+            ))
+            .unwrap();
+            assert_eq!(item, None);
+            assert_eq!(rest, "");
+        }
 
-    #[test]
-    fn should_return_none_for_empty_string() {
-        let (rest, item) = parse("").unwrap();
-        assert_eq!(item, None);
-        assert_eq!(rest, "");
+        #[test]
+        fn should_return_none_for_empty_string() {
+            let (rest, item) = next_paragraph("").unwrap();
+            assert_eq!(item, None);
+            assert_eq!(rest, "");
+        }
     }
 }
