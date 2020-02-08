@@ -62,6 +62,33 @@ pub fn next_paragraph(input: &str) -> Result<(&str, Option<Paragraph>), Error> {
     }
 }
 
+#[derive(Debug)]
+pub struct ParserIterator<'a> {
+    input: &'a str,
+}
+
+impl<'a> Iterator for ParserIterator<'a> {
+    type Item = Result<Paragraph<'a>, Error<'a>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match next_paragraph(self.input) {
+            Ok((rest, Some(paragraph))) => {
+                self.input = rest;
+                Some(Ok(paragraph))
+            }
+            Ok((rest, None)) => {
+                self.input = rest;
+                None
+            }
+            Err(err) => Some(Err(err)),
+        }
+    }
+}
+
+pub fn parse(input: &str) -> ParserIterator {
+    ParserIterator { input }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -298,6 +325,63 @@ mod tests {
             let (rest, item) = next_paragraph("").unwrap();
             assert_eq!(item, None);
             assert_eq!(rest, "");
+        }
+    }
+
+    mod parse {
+        use super::*;
+        use indoc::indoc;
+
+        #[test]
+        fn should_parse_multiple_paragraphs() {
+            let parser = parse(indoc!(
+                "
+                field: value
+                field: value
+                 cont
+                
+                # comment
+                field: value
+                field2: value2
+                # comment
+                
+                
+                field3: value3
+                 continuation
+                field4: value4
+                
+                "
+            ));
+            assert_eq!(
+                parser.map(Result::unwrap).collect::<Vec<_>>(),
+                vec![
+                    Paragraph::new(vec![field("field", "value"), field("field", "value\ncont"),]),
+                    Paragraph::new(vec![field("field", "value"), field("field2", "value2"),]),
+                    Paragraph::new(vec![
+                        field("field3", "value3\ncontinuation"),
+                        field("field4", "value4"),
+                    ]),
+                ]
+            );
+        }
+
+        #[test]
+        fn should_return_error_when_encountering_invalid_paragraph() {
+            let mut parser = parse(indoc!(
+                "
+                field: value
+                
+                # invalid:
+                 continuation
+                field2: value2
+                "
+            ));
+            assert_eq!(
+                parser.next().unwrap().unwrap(),
+                Paragraph::new(vec![field("field", "value")])
+            );
+            assert!(parser.next().unwrap().is_err());
+            assert!(parser.next().unwrap().is_err());
         }
     }
 }

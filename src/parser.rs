@@ -4,7 +4,7 @@ use nom::{
     branch::alt,
     bytes::complete::take_while1,
     character::complete::{char, line_ending, not_line_ending, space0, space1},
-    combinator::{map, opt, rest, verify},
+    combinator::{complete, map, opt, rest, verify},
     error::ParseError,
     multi::{many0, many0_count, many1},
     sequence::{pair, preceded, separated_pair, terminated, tuple},
@@ -108,7 +108,7 @@ pub(crate) fn paragraph<'a, E>(input: &'a str) -> IResult<&'a str, Option<Paragr
 where
     E: ParseError<&'a str>,
 {
-    preceded(
+    complete(preceded(
         many0_count(alt((blank_line, comment_line))),
         terminated(
             opt(map(many1(field_definition), Paragraph::new)),
@@ -117,7 +117,7 @@ where
                 map(verify(rest, |rest: &str| rest.len() == 0), |_| ()),
             )),
         ),
-    )(input)
+    ))(input)
 }
 
 #[cfg(test)]

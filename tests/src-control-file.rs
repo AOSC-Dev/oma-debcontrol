@@ -1,37 +1,13 @@
-use debcontrol::{next_paragraph, Error, Paragraph};
+use debcontrol::parse;
 
 static INPUT: &str = include_str!("control");
 
-struct It<'a> {
-    input: &'a str,
-}
-
-impl<'a> Iterator for It<'a> {
-    type Item = Result<Paragraph<'a>, Error<'a>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match next_paragraph(self.input) {
-            Ok((rest, Some(paragraph))) => {
-                self.input = rest;
-                Some(Ok(paragraph))
-            }
-            Ok((rest, None)) => {
-                self.input = rest;
-                None
-            }
-            Err(err) => Some(Err(err)),
-        }
-    }
-}
-
 #[test]
 fn should_parse_control_file() {
-    let mut iterator = It { input: INPUT };
-
-    let package_names = iterator
+    let package_names = parse(INPUT)
         .take_while(Result::is_ok)
         .map(Result::unwrap)
-        .flat_map(|paragraph: Paragraph| {
+        .flat_map(|paragraph| {
             paragraph
                 .fields
                 .into_iter()
