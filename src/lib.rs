@@ -330,6 +330,7 @@ mod tests {
 
     mod parse {
         use super::*;
+        use alloc::vec;
         use indoc::indoc;
 
         #[test]
