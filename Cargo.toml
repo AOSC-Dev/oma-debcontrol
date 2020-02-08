@@ -14,5 +14,7 @@ version = "5.1.0"
 default-features = false
 features = ["alloc"]
 
-[dev-dependencies.indoc]
-version = "0.3.4"
+[dev-dependencies]
+anyhow = "1.0.26"
+indoc = "0.3.4"
+json = "0.12.1"
