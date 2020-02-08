@@ -1,0 +1,46 @@
+image: rust
+
+variables:
+  SCCACHE_URL: https://github.com/mozilla/sccache/releases/download/0.2.12/sccache-0.2.12-x86_64-unknown-linux-musl.tar.gz
+  CARGO_TARGET_DIR: ${CI_PROJECT_DIR}/target
+  CARGO_HOME: ${CI_PROJECT_DIR}/cargo
+  SCCACHE_DIR: ${CI_PROJECT_DIR}/sccache
+  RUSTC_WRAPPER: sccache
+
+before_script:
+  - curl -L "${SCCACHE_URL}" | tar -C /usr/bin/ -xz --wildcards --strip-components=1 '*/sccache'
+  - rustup component add clippy rustfmt || true
+  - rustup target add thumbv8m.base-none-eabi
+
+cache:
+  paths:
+    - cargo/
+    - sccache/
+
+stages:
+  - build
+  - publish
+
+# build
+test:
+  stage: build
+  script:
+    - cargo fmt -- --check
+    - cargo clippy -- -D warnings
+    - cargo test --verbose --all
+
+test-no-std:
+  image: rustlang/rust:nightly
+  stage: build
+  script:
+    - cargo test --verbose --no-default-features
+    - cargo build --verbose --no-default-features --target thumbv8m.base-none-eabi
+
+# publish
+publish:
+  stage: publish
+  script:
+    - cargo publish --verbose --token $CRATES_IO_TOKEN
+  cache: {}
+  only:
+    - /^v.+$/
