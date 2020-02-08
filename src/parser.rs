@@ -1,5 +1,5 @@
 use crate::{Field, Paragraph};
-use alloc::string::String;
+use alloc::{string::String, vec::Vec};
 use nom::{
     branch::alt,
     bytes::complete::take_while1,
