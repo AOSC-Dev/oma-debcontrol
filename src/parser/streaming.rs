@@ -1,24 +1,17 @@
+use super::{field_from_parts, FieldDefinition, Line};
+use super::{is_field_name_char, starts_with_valid_char};
 use crate::{Field, Paragraph};
-use alloc::{string::String, vec::Vec};
 use nom::{
     branch::alt,
-    bytes::complete::take_while1,
-    character::complete::{char, line_ending, not_line_ending, space0, space1},
-    combinator::{complete, cut, map, opt, verify},
+    bytes::streaming::take_while1,
+    character::streaming::{char, line_ending, not_line_ending, space0, space1},
+    combinator::{cut, map, opt, verify},
     error::{context, make_error, ErrorKind, ParseError},
     multi::{many0, many0_count, many1},
     sequence::{pair, preceded, separated_pair, terminated, tuple},
     Err::Error,
     IResult,
 };
-
-fn is_field_name_char(c: char) -> bool {
-    c.is_ascii_graphic() && c != ':'
-}
-
-fn starts_with_valid_char(name: &str) -> bool {
-    !name.starts_with('#') && !name.starts_with('-')
-}
 
 fn field_name<'a, E>(input: &'a str) -> IResult<&'a str, &'a str, E>
 where
@@ -41,11 +34,6 @@ where
     terminated(not_line_ending, opt(line_ending))(input)
 }
 
-struct FieldDefinition<'a> {
-    name: &'a str,
-    value: &'a str,
-}
-
 fn field_definition_line<'a, E>(input: &'a str) -> IResult<&'a str, FieldDefinition<'a>, E>
 where
     E: ParseError<&'a str>,
@@ -54,12 +42,6 @@ where
         separated_pair(field_name, cut(colon_and_whitespace), cut(field_value)),
         |(name, value)| FieldDefinition { name, value },
     )(input)
-}
-
-enum Line<'a> {
-    Continuation(&'a str),
-    Comment,
-    Blank,
 }
 
 fn continuation_line<'a, E>(input: &'a str) -> IResult<&'a str, Line<'a>, E>
@@ -86,20 +68,6 @@ where
     E: ParseError<&'a str>,
 {
     map(terminated(space0, line_ending), |_| Line::Blank)(input)
-}
-
-fn field_from_parts<'a>(parts: (FieldDefinition<'a>, Vec<Line<'a>>)) -> Field<'a> {
-    let mut value = String::from(parts.0.value);
-    for line in parts.1 {
-        if let Line::Continuation(line) = line {
-            value.push('\n');
-            value.push_str(line);
-        }
-    }
-    Field {
-        name: parts.0.name,
-        value,
-    }
 }
 
 fn field_definition<'a, E>(input: &'a str) -> IResult<&'a str, Field<'a>, E>
@@ -129,17 +97,17 @@ where
     }
 }
 
-pub(crate) fn paragraph<'a, E>(input: &'a str) -> IResult<&'a str, Option<Paragraph>, E>
+pub(crate) fn paragraph<'a, E>(input: &'a str) -> IResult<&'a str, Paragraph, E>
 where
     E: ParseError<&'a str>,
 {
-    complete(preceded(
+    preceded(
         many0_count(alt((blank_line, comment_line))),
         terminated(
-            opt(map(many1(field_definition), Paragraph::new)),
+            map(many1(field_definition), Paragraph::new),
             context("paragraph terminator", alt((map(blank_line, |_| ()), eof))),
         ),
-    ))(input)
+    )(input)
 }
 
 #[cfg(test)]
