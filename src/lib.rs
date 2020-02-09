@@ -95,6 +95,7 @@ pub fn parse(input: &str) -> ParserIterator {
 mod tests {
     use super::*;
     use alloc::{string::ToString, vec};
+    use assert_matches::assert_matches;
     use indoc::indoc;
 
     pub(crate) fn field<'a>(name: &'a str, value: &'a str) -> Field<'a> {
@@ -107,285 +108,282 @@ mod tests {
     mod parse {
         use super::*;
 
-        /*#[test]
-        fn should_parse_simple_paragraph() {
-            let (rest, item) = next_paragraph(indoc!(
+        #[test]
+        fn should_parse_completed_paragraph() {
+            let (rest, item) = parse(indoc!(
                 "
-            field: value
-            field2: value 2
-            field3: value 3"
+                field: value
+                field2: value2
+                # comment 1
+                field3: line1
+                 line2
+                # comment 2
+                 line3
+                
+                "
             ))
             .unwrap();
             assert_eq!(
                 item,
-                Some(Paragraph::new(vec![
+                Paragraph::new(vec![
                     field("field", "value"),
-                    field("field2", "value 2"),
-                    field("field3", "value 3"),
-                ]))
+                    field("field2", "value2"),
+                    field("field3", "line1\nline2\nline3"),
+                ])
             );
             assert_eq!(rest, "");
         }
 
         #[test]
-        fn should_fail_on_incomplete_line() {
-            let result = next_paragraph(indoc!(
+        fn should_parse_completed_paragraph_followed_by_partial_paragraph() {
+            let (rest, item) = parse(indoc!(
                 "
-            field: value
-             continuation
-            incomplete-line
-            "
-            ));
-            assert!(result.is_err());
-        }
-
-        #[test]
-        fn should_fail_on_unexpected_continuation() {
-            let result = next_paragraph(indoc!(
+                
+                # comment
+                field: value
+                 cont
+                
+                # comment
+                
+                field2: value2
+                # comment
                 "
-
-             continuation
-            field: value
-            "
-            ));
-            assert!(result.is_err());
-        }
-
-        #[test]
-        fn should_parse_paragraph_with_continuation_lines() {
-            let (rest, item) = next_paragraph(indoc!(
-                "
-            field1: value
-             line2
-             line3
-            field2: value
-             line2
-            field3: value
-            field4: value
-             line2
-
-
-            "
             ))
             .unwrap();
-            assert_eq!(
-                item,
-                Some(Paragraph::new(vec![
-                    field("field1", "value\nline2\nline3"),
-                    field("field2", "value\nline2"),
-                    field("field3", "value"),
-                    field("field4", "value\nline2"),
-                ]))
-            );
-            assert_eq!(rest, "\n");
-        }
-
-        #[test]
-        fn should_parse_paragraph_with_comment_lines() {
-            let (rest, item) = next_paragraph(indoc!(
-                "
-            field1: value
-            # comment
-            field2: value
-            # comment
-             line2
-            # comment
-            # comment
-            # more comments
-            field3: value
-            "
-            ))
-            .unwrap();
-            assert_eq!(
-                item,
-                Some(Paragraph::new(vec![
-                    field("field1", "value"),
-                    field("field2", "value\nline2"),
-                    field("field3", "value"),
-                ]))
-            );
-            assert_eq!(rest, "");
-        }
-
-        #[test]
-        fn should_parse_one_of_multiple_paragraphs() {
-            let (rest, item) = next_paragraph(indoc!(
-                "
-            field: value
-            field: value
-            # comment
-            field: value
-            \tanother line
-            # comment
-
-            another: paragraph
-            # more stuff
-            field: value
-            "
-            ))
-            .unwrap();
-            assert_eq!(
-                item,
-                Some(Paragraph::new(vec![
-                    field("field", "value"),
-                    field("field", "value"),
-                    field("field", "value\nanother line"),
-                ]))
-            );
+            assert_eq!(item, Paragraph::new(vec![field("field", "value\ncont"),]));
             assert_eq!(
                 rest,
                 indoc!(
                     "
-                another: paragraph
-                # more stuff
-                field: value
-                "
+                    # comment
+                    
+                    field2: value2
+                    # comment
+                    "
                 )
             );
         }
 
         #[test]
-        fn should_parse_paragraph_with_leading_whitespace() {
-            let (rest, item) = next_paragraph(indoc!(
+        fn should_return_incomplete_on_incomplete_field_definition() {
+            let result = parse(indoc!(
                 "
+                field"
+            ));
+            assert_matches!(result, Err(StreamingErr::Incomplete));
+        }
 
-            \t\t
-              \t
+        #[test]
+        fn should_return_incomplete_on_field_definition_without_trailing_newline() {
+            let result = parse(indoc!(
+                "
+                field: value"
+            ));
+            assert_matches!(result, Err(StreamingErr::Incomplete));
+        }
 
-            field: value
-            field2: value2
-             line2
-            "
+        #[test]
+        fn should_return_incomplete_on_paragraph_without_trailing_empty_line() {
+            let result = parse(indoc!(
+                "
+                field: value
+                 continuation
+                "
+            ));
+            assert_matches!(result, Err(StreamingErr::Incomplete));
+        }
+
+        #[test]
+        fn should_return_incomplete_on_paragraph_without_trailing_newline() {
+            let result = parse(indoc!(
+                "
+                field: value
+                 continuation"
+            ));
+            assert_matches!(result, Err(StreamingErr::Incomplete));
+        }
+
+        #[test]
+        fn should_return_incomplete_on_empty_string() {
+            let result = parse("");
+            assert_matches!(result, Err(StreamingErr::Incomplete));
+        }
+
+        #[test]
+        fn should_return_incomplete_on_input_without_paragraph() {
+            let result = parse(indoc!(
+                "
+                
+                \t\t
+                
+                # comment
+                # comment
+                
+                \t
+                
+                
+                # comment"
+            ));
+            assert_matches!(result, Err(StreamingErr::Incomplete));
+        }
+
+        #[test]
+        fn should_return_error_on_unexpected_continuation() {
+            let result = parse(indoc!(
+                "
+                \tunexpected continuation
+                "
+            ));
+            assert_matches!(result, Err(StreamingErr::InvalidSyntax(_)));
+        }
+
+        #[test]
+        fn should_return_error_on_incomplete_field_definition() {
+            let result = parse(indoc!(
+                "
+                field
+                
+                "
+            ));
+            assert_matches!(result, Err(StreamingErr::InvalidSyntax(_)));
+        }
+
+        #[test]
+        fn should_return_error_on_field_name_starting_with_hyphen() {
+            let result = parse(indoc!(
+                "
+                -field: value
+                
+                "
+            ));
+            assert_matches!(result, Err(StreamingErr::InvalidSyntax(_)));
+        }
+
+        #[test]
+        fn should_return_error_on_invalid_field_name() {
+            let result = parse(indoc!(
+                "
+                field äöü: value
+                
+                "
+            ));
+            assert_matches!(result, Err(StreamingErr::InvalidSyntax(_)));
+        }
+    }
+
+    mod parse_finish {
+        use super::*;
+
+        #[test]
+        fn should_parse_paragraph_with_trailing_whitespace() {
+            let item = parse_finish(indoc!(
+                "
+                field: value
+                field2: value
+                
+                # comment
+                
+                
+                
+                "
             ))
             .unwrap();
             assert_eq!(
                 item,
                 Some(Paragraph::new(vec![
                     field("field", "value"),
-                    field("field2", "value2\nline2"),
+                    field("field2", "value")
                 ]))
             );
-            assert_eq!(rest, "");
         }
 
         #[test]
-        fn should_parse_paragraph_with_leading_comments() {
-            let (rest, item) = next_paragraph(indoc!(
-                "
-            # comment
-            field: value
-            "
-            ))
-            .unwrap();
-            assert_eq!(item, Some(Paragraph::new(vec![field("field", "value")])));
-            assert_eq!(rest, "");
-        }
-
-        #[test]
-        fn should_parse_paragraph_with_leading_whitespace_and_comments() {
-            let (rest, item) = next_paragraph(indoc!(
-                "
-
-            \t
-            # comment
-            \t
-            # comments
-
-            field: value
-            "
-            ))
-            .unwrap();
-            assert_eq!(item, Some(Paragraph::new(vec![field("field", "value")])));
-            assert_eq!(rest, "");
-        }
-
-        #[test]
-        fn should_return_none_for_input_without_a_paragraph() {
-            let (rest, item) = next_paragraph(indoc!(
-                "
-            \t
-            # comment
-
-            # comment
-
-
-            \t\t  \n
-
-            # comment
-
-
-            "
-            ))
-            .unwrap();
-            assert_eq!(item, None);
-            assert_eq!(rest, "");
-        }
-
-        #[test]
-        fn should_return_none_for_empty_string() {
-            let (rest, item) = next_paragraph("").unwrap();
-            assert_eq!(item, None);
-            assert_eq!(rest, "");
-        }*/
-    }
-
-    mod parse_finish {
-        use super::*;
-
-        /*#[test]
-        fn should_parse_multiple_paragraphs() {
-            let parser = parse(indoc!(
+        fn should_parse_paragraph_without_trailing_newline() {
+            let item = parse_finish(indoc!(
                 "
                 field: value
-                field: value
-                 cont
-
+                field2: line1
                 # comment
-                field: value
-                field2: value2
-                # comment
-
-
-                field3: value3
-                 continuation
-                field4: value4
-
-                "
-            ));
+                \tline2"
+            ))
+            .unwrap();
             assert_eq!(
-                parser.map(Result::unwrap).collect::<Vec<_>>(),
-                vec![
-                    Paragraph::new(vec![field("field", "value"), field("field", "value\ncont"),]),
-                    Paragraph::new(vec![field("field", "value"), field("field2", "value2"),]),
-                    Paragraph::new(vec![
-                        field("field3", "value3\ncontinuation"),
-                        field("field4", "value4"),
-                    ]),
-                ]
+                item,
+                Some(Paragraph::new(vec![
+                    field("field", "value"),
+                    field("field2", "line1\nline2")
+                ]))
             );
         }
 
         #[test]
-        fn should_return_error_when_encountering_invalid_paragraph() {
-            let mut parser = parse(indoc!(
-                "
-                field: value
-
-                # invalid:
-                 continuation
-                field2: value2
-                "
-            ));
-            assert_eq!(
-                parser.next().unwrap().unwrap(),
-                Paragraph::new(vec![field("field", "value")])
-            );
-            assert!(parser.next().unwrap().is_err());
-            assert!(parser.next().unwrap().is_err());
-        }*/
+        fn should_return_error_on_incomplete_field_definition() {
+            let result = parse_finish("field");
+            assert_matches!(result, Err(_));
+        }
     }
 
     mod parse_complete {
         use super::*;
+
+        #[test]
+        fn should_parse_multiple_paragraphs() {
+            let items = parse_complete(indoc!(
+                "
+                # comment
+                
+                field: value
+                field2: line1
+                 line2
+                # comment
+                
+                field3: value3
+                field4: value4
+                
+                # comment
+                
+                field5: value5
+                field6: value6"
+            ))
+            .unwrap();
+            assert_eq!(
+                items,
+                vec![
+                    Paragraph::new(vec![
+                        field("field", "value"),
+                        field("field2", "line1\nline2"),
+                    ]),
+                    Paragraph::new(vec![field("field3", "value3"), field("field4", "value4"),]),
+                    Paragraph::new(vec![field("field5", "value5"), field("field6", "value6"),]),
+                ]
+            )
+        }
+
+        #[test]
+        fn should_parse_empty_input() {
+            let items = parse_complete(indoc!(
+                "
+                
+                \t\t
+                
+                # comment
+                \t
+                
+                    \n
+                "
+            ))
+            .unwrap();
+            assert_eq!(items, vec![]);
+        }
+
+        #[test]
+        fn should_return_error_on_invalid_syntax() {
+            let result = parse_complete(indoc!(
+                "
+                field 15: value
+                "
+            ));
+            assert_matches!(result, Err(_));
+        }
     }
 }
