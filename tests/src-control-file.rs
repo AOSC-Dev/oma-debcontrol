@@ -1,12 +1,12 @@
-use debcontrol::parse;
+use debcontrol::parse_complete;
 
 static INPUT: &str = include_str!("control");
 
 #[test]
 fn should_parse_control_file() {
-    let package_names = parse(INPUT)
-        .take_while(Result::is_ok)
-        .map(Result::unwrap)
+    let package_names = parse_complete(INPUT)
+        .unwrap()
+        .into_iter()
         .flat_map(|paragraph| {
             paragraph
                 .fields

@@ -31,13 +31,18 @@ type ErrorType<'a> = nom::error::VerboseError<&'a str>;
 #[derive(Debug)]
 pub struct Error<'a> {
     input: &'a str,
-    error: ErrorType<'a>,
+    underlying: ErrorType<'a>,
 }
 
 impl<'a> fmt::Display for Error<'a> {
     #[cfg(not(feature = "verbose-errors"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} at '{}'", self.error.1.description(), self.error.0)
+        write!(
+            f,
+            "{} at '{}'",
+            self.underlying.1.description(),
+            self.underlying.0
+        )
     }
 
     #[cfg(feature = "verbose-errors")]
@@ -45,7 +50,7 @@ impl<'a> fmt::Display for Error<'a> {
         write!(
             f,
             "{}",
-            nom::error::convert_error(self.input, self.error.clone())
+            nom::error::convert_error(self.input, self.underlying.clone())
         )
     }
 }
@@ -53,46 +58,44 @@ impl<'a> fmt::Display for Error<'a> {
 #[cfg(feature = "std")]
 impl<'a> std::error::Error for Error<'a> {}
 
-pub fn next_paragraph(input: &str) -> Result<(&str, Option<Paragraph>), Error> {
+#[derive(Debug)]
+pub enum StreamingErr<'a> {
+    Incomplete,
+    InvalidSyntax(Error<'a>),
+}
+
+pub fn parse(input: &str) -> Result<(&str, Paragraph), StreamingErr> {
+    todo!()
+}
+
+pub fn parse_finish(input: &str) -> Result<Option<Paragraph>, Error> {
+    todo!()
+}
+
+pub fn parse_complete(input: &str) -> Result<Vec<Paragraph>, Error> {
+    todo!()
+}
+
+/*pub fn next_paragraph(input: &str) -> Result<(&str, Option<Paragraph>), Error> {
     match parser::paragraph::<ErrorType>(input) {
         Ok((rest, item)) => Ok((rest, item)),
-        Err(nom::Err::Error(error)) => Err(Error { input, error }),
-        Err(nom::Err::Failure(error)) => Err(Error { input, error }),
+        Err(nom::Err::Error(error)) => Err(Error { input, underlying: error }),
+        Err(nom::Err::Failure(error)) => Err(Error { input, underlying: error }),
         Err(nom::Err::Incomplete(_)) => unimplemented!(),
     }
 }
 
-#[derive(Debug)]
-pub struct ParserIterator<'a> {
-    input: &'a str,
-}
-
-impl<'a> Iterator for ParserIterator<'a> {
-    type Item = Result<Paragraph<'a>, Error<'a>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match next_paragraph(self.input) {
-            Ok((rest, Some(paragraph))) => {
-                self.input = rest;
-                Some(Ok(paragraph))
-            }
-            Ok((rest, None)) => {
-                self.input = rest;
-                None
-            }
-            Err(err) => Some(Err(err)),
-        }
-    }
-}
+pub fn parse()
 
 pub fn parse(input: &str) -> ParserIterator {
     ParserIterator { input }
-}
+}*/
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::string::ToString;
+    use alloc::{string::ToString, vec};
+    use indoc::indoc;
 
     pub(crate) fn field<'a>(name: &'a str, value: &'a str) -> Field<'a> {
         Field {
@@ -101,12 +104,10 @@ mod tests {
         }
     }
 
-    mod next_paragraph {
+    mod parse {
         use super::*;
-        use alloc::vec;
-        use indoc::indoc;
 
-        #[test]
+        /*#[test]
         fn should_parse_simple_paragraph() {
             let (rest, item) = next_paragraph(indoc!(
                 "
@@ -142,7 +143,7 @@ mod tests {
         fn should_fail_on_unexpected_continuation() {
             let result = next_paragraph(indoc!(
                 "
-            
+
              continuation
             field: value
             "
@@ -325,32 +326,30 @@ mod tests {
             let (rest, item) = next_paragraph("").unwrap();
             assert_eq!(item, None);
             assert_eq!(rest, "");
-        }
+        }*/
     }
 
-    mod parse {
+    mod parse_finish {
         use super::*;
-        use alloc::vec;
-        use indoc::indoc;
 
-        #[test]
+        /*#[test]
         fn should_parse_multiple_paragraphs() {
             let parser = parse(indoc!(
                 "
                 field: value
                 field: value
                  cont
-                
+
                 # comment
                 field: value
                 field2: value2
                 # comment
-                
-                
+
+
                 field3: value3
                  continuation
                 field4: value4
-                
+
                 "
             ));
             assert_eq!(
@@ -371,7 +370,7 @@ mod tests {
             let mut parser = parse(indoc!(
                 "
                 field: value
-                
+
                 # invalid:
                  continuation
                 field2: value2
@@ -383,6 +382,10 @@ mod tests {
             );
             assert!(parser.next().unwrap().is_err());
             assert!(parser.next().unwrap().is_err());
-        }
+        }*/
+    }
+
+    mod parse_complete {
+        use super::*;
     }
 }

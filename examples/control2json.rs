@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context};
-use debcontrol::{parse, Paragraph};
+use debcontrol::{parse_complete, Paragraph};
 use json::JsonValue;
 use std::{env::args_os, fs::read_to_string, io::stdout, path::PathBuf};
 
@@ -20,8 +20,7 @@ fn main() -> anyhow::Result<()> {
         .into();
 
     let input = read_to_string(filename)?;
-    let json: JsonValue = parse(&input)
-        .collect::<Result<Vec<_>, _>>()
+    let json: JsonValue = parse_complete(&input)
         .map_err(|x| anyhow!("{}", x))?
         .into_iter()
         .map(paragraph_to_json)
