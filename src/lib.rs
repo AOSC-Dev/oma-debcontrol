@@ -66,7 +66,8 @@ pub enum StreamingErr<'a> {
 
 pub fn parse(input: &str) -> Result<(&str, Paragraph), StreamingErr> {
     match parser::streaming::paragraph::<ErrorType>(input) {
-        Ok((rest, item)) => Ok((rest, item)),
+        Ok((rest, Some(item))) => Ok((rest, item)),
+        Ok((_, None)) => Err(StreamingErr::Incomplete),
         Err(nom::Err::Error(underlying)) => {
             Err(StreamingErr::InvalidSyntax(Error { input, underlying }))
         }
