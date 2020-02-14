@@ -85,51 +85,40 @@ impl<'a> fmt::Display for Error<'a> {
 #[cfg(feature = "std")]
 impl<'a> std::error::Error for Error<'a> {}
 
-/// An error result from the streaming parser.
-#[derive(Debug)]
-pub enum StreamingErr<'a> {
-    /// More input is needed.
-    ///
-    /// This isn't a fatal error; you must read more input from the source and then try again.
+/// A return value from the streaming parser.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Streaming<T> {
+    /// An item returned from the parser.
+    Item(T),
+    /// More input is needed to make a parsing decision.
     Incomplete,
-    /// A syntax error was found.
-    ///
-    /// This *is* a fatal error; it indicates unambiguously invalid syntax in the input.
-    InvalidSyntax(Error<'a>),
 }
 
 /// Attempt to parse a paragraph from the given input.
 ///
 /// This function returns a paragraph and any remaining input if a paragraph can be unambiguously
-/// parsed. If there's no complete paragraph in the input, an `Err` containing
-/// [`Incomplete`](enum.StreamingErr.html#variant.Incomplete) is returned. In that case, you need to
-/// either:
+/// parsed. If there's no complete paragraph in the input,
+/// [`Streaming::Incomplete`](enum.Streaming.html#variant.Incomplete) is returned. In that case,
+/// you need to either:
 ///
 /// * read more data from the source and try again or
 /// * if there's no more data in the source, call [`parse_finish`](fn.parse_finish.html) with all
 ///   remaining input.
-///
-/// Any other `Err` result is a fatal error; adding more input and retrying will not change that
-/// result.
-pub fn parse(input: &str) -> Result<(&str, Paragraph), StreamingErr> {
+pub fn parse(input: &str) -> Result<Streaming<(&str, Paragraph)>, Error> {
     match parser::streaming::paragraph::<ErrorType>(input) {
-        Ok((rest, Some(item))) => Ok((rest, item)),
-        Ok((_, None)) => Err(StreamingErr::Incomplete),
-        Err(nom::Err::Error(underlying)) => {
-            Err(StreamingErr::InvalidSyntax(Error { input, underlying }))
-        }
-        Err(nom::Err::Failure(underlying)) => {
-            Err(StreamingErr::InvalidSyntax(Error { input, underlying }))
-        }
-        Err(nom::Err::Incomplete(_)) => Err(StreamingErr::Incomplete),
+        Ok((remaining, Some(item))) => Ok(Streaming::Item((remaining, item))),
+        Ok((_, None)) => Ok(Streaming::Incomplete),
+        Err(nom::Err::Incomplete(_)) => Ok(Streaming::Incomplete),
+        Err(nom::Err::Error(underlying)) => Err(Error { input, underlying }),
+        Err(nom::Err::Failure(underlying)) => Err(Error { input, underlying }),
     }
 }
 
 /// Finish parsing the streaming input and return the final remaining paragraph, if any.
 ///
 /// This is the companion function to [`parse`](fn.parse.html). Once all input has been read and
-/// `parse` returns [`Incomplete`](enum.StreamingErr.html#variant.Incomplete), call this function
-/// with any remaining input to parse the final remaining paragraph. If the remaining input is only
+/// `parse` returns [`Incomplete`](enum.Streaming.html#variant.Incomplete), call this function with
+/// any remaining input to parse the final remaining paragraph. If the remaining input is only
 /// whitespace and comments, `None` is returned.
 pub fn parse_finish(input: &str) -> Result<Option<Paragraph>, Error> {
     match parser::complete::paragraph::<ErrorType>(input) {
@@ -147,19 +136,12 @@ pub fn parse_finish(input: &str) -> Result<Option<Paragraph>, Error> {
 pub fn parse_complete(input: &str) -> Result<Vec<Paragraph>, Error> {
     let mut paragraphs = Vec::new();
 
-    let mut rest = input;
-    loop {
-        match parse(rest) {
-            Ok((rest2, item)) => {
-                paragraphs.push(item);
-                rest = rest2;
-            }
-            Err(StreamingErr::InvalidSyntax(error)) => return Err(error),
-            Err(StreamingErr::Incomplete) => break,
-        }
+    let mut input = input;
+    while let Streaming::Item((remaining, item)) = parse(input)? {
+        paragraphs.push(item);
+        input = remaining;
     }
-
-    if let Some(paragraph) = parse_finish(rest)? {
+    if let Some(paragraph) = parse_finish(input)? {
         paragraphs.push(paragraph);
     }
 

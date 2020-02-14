@@ -15,7 +15,7 @@ mod parse {
 
     #[test]
     fn should_parse_completed_paragraph() {
-        let (rest, item) = parse(indoc!(
+        let result = parse(indoc!(
             "
             field: value
             field2: value2
@@ -26,22 +26,23 @@ mod parse {
              line3
             
             "
-        ))
-        .unwrap();
+        ));
         assert_eq!(
-            item,
-            Paragraph::new(vec![
-                field("field", "value"),
-                field("field2", "value2"),
-                field("field3", "line1\nline2\nline3"),
-            ])
+            result.unwrap(),
+            Streaming::Item((
+                "",
+                Paragraph::new(vec![
+                    field("field", "value"),
+                    field("field2", "value2"),
+                    field("field3", "line1\nline2\nline3"),
+                ])
+            ))
         );
-        assert_eq!(rest, "");
     }
 
     #[test]
     fn should_parse_completed_paragraph_followed_by_partial_paragraph() {
-        let (rest, item) = parse(indoc!(
+        let result = parse(indoc!(
             "
             
             # comment
@@ -53,19 +54,20 @@ mod parse {
             field2: value2
             # comment
             "
-        ))
-        .unwrap();
-        assert_eq!(item, Paragraph::new(vec![field("field", "value\ncont"),]));
+        ));
         assert_eq!(
-            rest,
-            indoc!(
-                "
-                # comment
-                
-                field2: value2
-                # comment
-                "
-            )
+            result.unwrap(),
+            Streaming::Item((
+                indoc!(
+                    "
+                    # comment
+                    
+                    field2: value2
+                    # comment
+                    "
+                ),
+                Paragraph::new(vec![field("field", "value\ncont"),])
+            ))
         );
     }
 
@@ -75,7 +77,7 @@ mod parse {
             "
             field"
         ));
-        assert_matches!(result, Err(StreamingErr::Incomplete));
+        assert_matches!(result, Ok(Streaming::Incomplete));
     }
 
     #[test]
@@ -84,7 +86,7 @@ mod parse {
             "
             field: value"
         ));
-        assert_matches!(result, Err(StreamingErr::Incomplete));
+        assert_matches!(result, Ok(Streaming::Incomplete));
     }
 
     #[test]
@@ -95,7 +97,7 @@ mod parse {
              continuation
             "
         ));
-        assert_matches!(result, Err(StreamingErr::Incomplete));
+        assert_matches!(result, Ok(Streaming::Incomplete));
     }
 
     #[test]
@@ -105,13 +107,13 @@ mod parse {
             field: value
              continuation"
         ));
-        assert_matches!(result, Err(StreamingErr::Incomplete));
+        assert_matches!(result, Ok(Streaming::Incomplete));
     }
 
     #[test]
     fn should_return_incomplete_on_empty_string() {
         let result = parse("");
-        assert_matches!(result, Err(StreamingErr::Incomplete));
+        assert_matches!(result, Ok(Streaming::Incomplete));
     }
 
     #[test]
@@ -129,7 +131,7 @@ mod parse {
             
             # comment"
         ));
-        assert_matches!(result, Err(StreamingErr::Incomplete));
+        assert_matches!(result, Ok(Streaming::Incomplete));
     }
 
     #[test]
@@ -139,7 +141,7 @@ mod parse {
             \tunexpected continuation
             "
         ));
-        assert_matches!(result, Err(StreamingErr::InvalidSyntax(_)));
+        assert_matches!(result, Err(_));
     }
 
     #[test]
@@ -150,7 +152,7 @@ mod parse {
             
             "
         ));
-        assert_matches!(result, Err(StreamingErr::InvalidSyntax(_)));
+        assert_matches!(result, Err(_));
     }
 
     #[test]
@@ -159,7 +161,7 @@ mod parse {
             "
             -field: value"
         ));
-        assert_matches!(result, Err(StreamingErr::InvalidSyntax(_)));
+        assert_matches!(result, Err(_));
     }
 
     #[test]
@@ -170,7 +172,7 @@ mod parse {
             
             "
         ));
-        assert_matches!(result, Err(StreamingErr::InvalidSyntax(_)));
+        assert_matches!(result, Err(_));
     }
 }
 
@@ -189,10 +191,9 @@ mod parse_finish {
             
             
             "
-        ))
-        .unwrap();
+        ));
         assert_eq!(
-            item,
+            item.unwrap(),
             Some(Paragraph::new(vec![
                 field("field", "value"),
                 field("field2", "value")
@@ -208,10 +209,9 @@ mod parse_finish {
             field2: line1
             # comment
             \tline2"
-        ))
-        .unwrap();
+        ));
         assert_eq!(
-            item,
+            item.unwrap(),
             Some(Paragraph::new(vec![
                 field("field", "value"),
                 field("field2", "line1\nline2")
@@ -247,10 +247,9 @@ mod parse_complete {
             
             field5: value5
             field6: value6"
-        ))
-        .unwrap();
+        ));
         assert_eq!(
-            items,
+            items.unwrap(),
             vec![
                 Paragraph::new(vec![
                     field("field", "value"),
@@ -274,9 +273,8 @@ mod parse_complete {
             
                 \n
             "
-        ))
-        .unwrap();
-        assert_eq!(items, vec![]);
+        ));
+        assert_eq!(items.unwrap(), vec![]);
     }
 
     #[test]
