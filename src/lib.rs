@@ -2,14 +2,61 @@
 //!
 //! [Debian control files]: https://www.debian.org/doc/debian-policy/ch-controlfields.html
 //!
-//! # Examples
-//! TODO
+//! # Parse complete input
+//! The [`parse_str`](fn.parse_str.html) function will parse a complete control file into a vec of
+//! [`Paragraph`](struct.Paragraph.html) values:
+//! ```
+//! # use debcontrol::{Paragraph, Field, parse_str};
+//! # fn main() -> Result<(), debcontrol::Error<'static>> {
+//! let paragraphs = parse_str("
+//! a-field: with a value
+//! another-field: with a...
+//!  ...continuation
+//! ")?;
+//!
+//! assert_eq!(paragraphs, vec![Paragraph {
+//!     fields: vec![
+//!         Field { name: "a-field", value: String::from("with a value") },
+//!         Field { name: "another-field", value: String::from("with a...\n...continuation") }
+//!     ]
+//! }]);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Parse streaming input
+//! The [`parse_streaming`](fn.parse_streaming.html) and [`parse_finish`](fn.parse_finish.html)
+//! functions can be used to parse a control file incrementally:
+//! ```
+//! # use debcontrol::{Paragraph, Field, Streaming, parse_streaming, parse_finish};
+//! # fn main() -> Result<(), debcontrol::Error<'static>> {
+//! let result = parse_streaming("field: value")?;
+//! assert_eq!(result, Streaming::Incomplete);
+//!
+//! let result = parse_streaming("field: value\n\n")?;
+//! assert_eq!(result, Streaming::Item(("", Paragraph {
+//!     fields: vec![
+//!         Field { name: "field", value: String::from("value") }
+//!     ]
+//! })));
+//!
+//! let result = parse_finish("remaining: input")?;
+//! assert_eq!(result, Some(Paragraph {
+//!     fields: vec![
+//!         Field { name: "remaining", value: String::from("input") }
+//!     ]
+//! }));
+//! # Ok(())
+//! # }
+//! ```
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
+
 use alloc::{string::String, vec::Vec};
 use core::fmt;
+
 mod parser;
 
 #[cfg(test)]
