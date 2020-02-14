@@ -10,12 +10,12 @@ pub(crate) fn field<'a>(name: &'a str, value: &'a str) -> Field<'a> {
     }
 }
 
-mod parse {
+mod parse_streaming {
     use super::*;
 
     #[test]
     fn should_parse_completed_paragraph() {
-        let result = parse(indoc!(
+        let result = parse_streaming(indoc!(
             "
             field: value
             field2: value2
@@ -42,7 +42,7 @@ mod parse {
 
     #[test]
     fn should_parse_completed_paragraph_followed_by_partial_paragraph() {
-        let result = parse(indoc!(
+        let result = parse_streaming(indoc!(
             "
             
             # comment
@@ -73,7 +73,7 @@ mod parse {
 
     #[test]
     fn should_return_incomplete_on_incomplete_field_definition() {
-        let result = parse(indoc!(
+        let result = parse_streaming(indoc!(
             "
             field"
         ));
@@ -82,7 +82,7 @@ mod parse {
 
     #[test]
     fn should_return_incomplete_on_field_definition_without_trailing_newline() {
-        let result = parse(indoc!(
+        let result = parse_streaming(indoc!(
             "
             field: value"
         ));
@@ -91,7 +91,7 @@ mod parse {
 
     #[test]
     fn should_return_incomplete_on_paragraph_without_trailing_empty_line() {
-        let result = parse(indoc!(
+        let result = parse_streaming(indoc!(
             "
             field: value
              continuation
@@ -102,7 +102,7 @@ mod parse {
 
     #[test]
     fn should_return_incomplete_on_paragraph_without_trailing_newline() {
-        let result = parse(indoc!(
+        let result = parse_streaming(indoc!(
             "
             field: value
              continuation"
@@ -112,13 +112,13 @@ mod parse {
 
     #[test]
     fn should_return_incomplete_on_empty_string() {
-        let result = parse("");
+        let result = parse_streaming("");
         assert_matches!(result, Ok(Streaming::Incomplete));
     }
 
     #[test]
     fn should_return_incomplete_on_input_without_paragraph() {
-        let result = parse(indoc!(
+        let result = parse_streaming(indoc!(
             "
             
             \t\t
@@ -136,7 +136,7 @@ mod parse {
 
     #[test]
     fn should_return_error_on_unexpected_continuation() {
-        let result = parse(indoc!(
+        let result = parse_streaming(indoc!(
             "
             \tunexpected continuation
             "
@@ -146,7 +146,7 @@ mod parse {
 
     #[test]
     fn should_return_error_on_incomplete_field_definition() {
-        let result = parse(indoc!(
+        let result = parse_streaming(indoc!(
             "
             field
             
@@ -157,7 +157,7 @@ mod parse {
 
     #[test]
     fn should_return_error_on_field_name_starting_with_hyphen() {
-        let result = parse(indoc!(
+        let result = parse_streaming(indoc!(
             "
             -field: value"
         ));
@@ -166,7 +166,7 @@ mod parse {
 
     #[test]
     fn should_return_error_on_invalid_field_name() {
-        let result = parse(indoc!(
+        let result = parse_streaming(indoc!(
             "
             field äöü: value
             
@@ -226,12 +226,12 @@ mod parse_finish {
     }
 }
 
-mod parse_complete {
+mod parse_str {
     use super::*;
 
     #[test]
     fn should_parse_multiple_paragraphs() {
-        let items = parse_complete(indoc!(
+        let items = parse_str(indoc!(
             "
             # comment
             
@@ -263,7 +263,7 @@ mod parse_complete {
 
     #[test]
     fn should_parse_empty_input() {
-        let items = parse_complete(indoc!(
+        let items = parse_str(indoc!(
             "
             
             \t\t
@@ -279,7 +279,7 @@ mod parse_complete {
 
     #[test]
     fn should_return_error_on_invalid_syntax() {
-        let result = parse_complete(indoc!(
+        let result = parse_str(indoc!(
             "
             field 15: value
             "

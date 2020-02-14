@@ -104,7 +104,7 @@ pub enum Streaming<T> {
 /// * read more data from the source and try again or
 /// * if there's no more data in the source, call [`parse_finish`](fn.parse_finish.html) with all
 ///   remaining input.
-pub fn parse(input: &str) -> Result<Streaming<(&str, Paragraph)>, Error> {
+pub fn parse_streaming(input: &str) -> Result<Streaming<(&str, Paragraph)>, Error> {
     match parser::streaming::paragraph::<ErrorType>(input) {
         Ok((remaining, Some(item))) => Ok(Streaming::Item((remaining, item))),
         Ok((_, None)) => Ok(Streaming::Incomplete),
@@ -116,10 +116,11 @@ pub fn parse(input: &str) -> Result<Streaming<(&str, Paragraph)>, Error> {
 
 /// Finish parsing the streaming input and return the final remaining paragraph, if any.
 ///
-/// This is the companion function to [`parse`](fn.parse.html). Once all input has been read and
-/// `parse` returns [`Incomplete`](enum.Streaming.html#variant.Incomplete), call this function with
-/// any remaining input to parse the final remaining paragraph. If the remaining input is only
-/// whitespace and comments, `None` is returned.
+/// This is the companion function to [`parse_streaming`](fn.parse_streaming.html). Once all input
+/// has been read and `parse_streaming` returns
+/// [`Incomplete`](enum.Streaming.html#variant.Incomplete), call this function with any remaining
+/// input to parse the final remaining paragraph. If the remaining input is only whitespace and
+/// comments, `None` is returned.
 pub fn parse_finish(input: &str) -> Result<Option<Paragraph>, Error> {
     match parser::complete::paragraph::<ErrorType>(input) {
         Ok((_, item)) => Ok(item),
@@ -133,11 +134,11 @@ pub fn parse_finish(input: &str) -> Result<Option<Paragraph>, Error> {
 ///
 /// This function does not work for partial input. The entire control file must be passed in at
 /// once.
-pub fn parse_complete(input: &str) -> Result<Vec<Paragraph>, Error> {
+pub fn parse_str(input: &str) -> Result<Vec<Paragraph>, Error> {
     let mut paragraphs = Vec::new();
 
     let mut input = input;
-    while let Streaming::Item((remaining, item)) = parse(input)? {
+    while let Streaming::Item((remaining, item)) = parse_streaming(input)? {
         paragraphs.push(item);
         input = remaining;
     }
