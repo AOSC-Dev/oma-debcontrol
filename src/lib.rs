@@ -58,7 +58,8 @@ use alloc::{string::String, vec::Vec};
 use core::fmt;
 
 mod parser;
-
+mod stream_parser;
+pub use stream_parser::*;
 #[cfg(test)]
 mod tests;
 
