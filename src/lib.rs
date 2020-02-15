@@ -7,7 +7,7 @@
 //! [`Paragraph`](struct.Paragraph.html) values:
 //! ```
 //! # use debcontrol::{Paragraph, Field, parse_str};
-//! # fn main() -> Result<(), debcontrol::Error<'static>> {
+//! # fn main() -> Result<(), debcontrol::SyntaxError<'static>> {
 //! let paragraphs = parse_str("
 //! a-field: with a value
 //! another-field: with a...
@@ -29,7 +29,7 @@
 //! functions can be used to parse a control file incrementally:
 //! ```
 //! # use debcontrol::{Paragraph, Field, Streaming, parse_streaming, parse_finish};
-//! # fn main() -> Result<(), debcontrol::Error<'static>> {
+//! # fn main() -> Result<(), debcontrol::SyntaxError<'static>> {
 //! let result = parse_streaming("field: value")?;
 //! assert_eq!(result, Streaming::Incomplete);
 //!
@@ -57,9 +57,9 @@ extern crate alloc;
 use alloc::{string::String, vec::Vec};
 use core::fmt;
 
+mod buf_parse;
 mod parser;
-mod stream_parser;
-pub use stream_parser::*;
+pub use buf_parse::*;
 #[cfg(test)]
 mod tests;
 
@@ -99,17 +99,17 @@ type ErrorType<'a> = nom::error::VerboseError<&'a str>;
 
 /// A parsing syntax error.
 ///
-/// This is an opaque error type that wraps an underlying error. The format and level of detail of
-/// the error output depends on the `verbose-errors` feature.
+/// This is an opaque error type that wraps an underlying syntax error. The format and level of
+/// detail of the error output depends on the `verbose-errors` feature.
 #[derive(Debug)]
-pub struct Error<'a> {
+pub struct SyntaxError<'a> {
     /// The parser input that caused the error.
     input: &'a str,
-    /// The underlying error from nom.
+    /// The underlying nom error.
     underlying: ErrorType<'a>,
 }
 
-impl<'a> fmt::Display for Error<'a> {
+impl<'a> fmt::Display for SyntaxError<'a> {
     #[cfg(not(feature = "verbose-errors"))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -131,7 +131,7 @@ impl<'a> fmt::Display for Error<'a> {
 }
 
 #[cfg(feature = "std")]
-impl<'a> std::error::Error for Error<'a> {}
+impl<'a> std::error::Error for SyntaxError<'a> {}
 
 /// A return value from the streaming parser.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -152,13 +152,13 @@ pub enum Streaming<T> {
 /// * read more data from the source and try again or
 /// * if there's no more data in the source, call [`parse_finish`](fn.parse_finish.html) with all
 ///   remaining input.
-pub fn parse_streaming(input: &str) -> Result<Streaming<(&str, Paragraph)>, Error> {
+pub fn parse_streaming(input: &str) -> Result<Streaming<(&str, Paragraph)>, SyntaxError> {
     match parser::streaming::paragraph::<ErrorType>(input) {
         Ok((remaining, Some(item))) => Ok(Streaming::Item((remaining, item))),
         Ok((_, None)) => Ok(Streaming::Incomplete),
         Err(nom::Err::Incomplete(_)) => Ok(Streaming::Incomplete),
-        Err(nom::Err::Error(underlying)) => Err(Error { input, underlying }),
-        Err(nom::Err::Failure(underlying)) => Err(Error { input, underlying }),
+        Err(nom::Err::Error(underlying)) => Err(SyntaxError { input, underlying }),
+        Err(nom::Err::Failure(underlying)) => Err(SyntaxError { input, underlying }),
     }
 }
 
@@ -169,11 +169,11 @@ pub fn parse_streaming(input: &str) -> Result<Streaming<(&str, Paragraph)>, Erro
 /// [`Incomplete`](enum.Streaming.html#variant.Incomplete), call this function with any remaining
 /// input to parse the final remaining paragraph. If the remaining input is only whitespace and
 /// comments, `None` is returned.
-pub fn parse_finish(input: &str) -> Result<Option<Paragraph>, Error> {
+pub fn parse_finish(input: &str) -> Result<Option<Paragraph>, SyntaxError> {
     match parser::complete::paragraph::<ErrorType>(input) {
         Ok((_, item)) => Ok(item),
-        Err(nom::Err::Error(underlying)) => Err(Error { input, underlying }),
-        Err(nom::Err::Failure(underlying)) => Err(Error { input, underlying }),
+        Err(nom::Err::Error(underlying)) => Err(SyntaxError { input, underlying }),
+        Err(nom::Err::Failure(underlying)) => Err(SyntaxError { input, underlying }),
         Err(nom::Err::Incomplete(_)) => unimplemented!(),
     }
 }
@@ -182,7 +182,7 @@ pub fn parse_finish(input: &str) -> Result<Option<Paragraph>, Error> {
 ///
 /// This function does not work for partial input. The entire control file must be passed in at
 /// once.
-pub fn parse_str(input: &str) -> Result<Vec<Paragraph>, Error> {
+pub fn parse_str(input: &str) -> Result<Vec<Paragraph>, SyntaxError> {
     let mut paragraphs = Vec::new();
 
     let mut input = input;

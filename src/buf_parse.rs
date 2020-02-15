@@ -1,15 +1,28 @@
-use crate::{parse_finish, parse_streaming, Error, Paragraph, Streaming};
+use crate::{parse_finish, parse_streaming, Paragraph, Streaming, SyntaxError};
 use alloc::vec::Vec;
-use core::str::{from_utf8, Utf8Error};
+use core::{
+    fmt,
+    str::{from_utf8, Utf8Error},
+};
 
-pub trait Read {
+/// A helper trait for stream input.
+///
+/// This trait is modeled on std's `Read`, but is separate so it's usable with `no_std`. When the
+/// `std` feature is enabled (it is by default), this trait has a blanket implementation for every
+/// type that implement std's `Read`.
+pub trait BufParseInput {
+    /// The error type returned by read operations.
     type Error;
 
+    /// Read bytes into the provided buffer, up to its length, and return the number of bytes read.
+    ///
+    /// This function may read fewer bytes. If no more input is available, it should not modify the
+    /// buffer and merely return 0.
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
 }
 
 #[cfg(feature = "std")]
-impl<R: std::io::Read> Read for R {
+impl<R: std::io::Read> BufParseInput for R {
     type Error = std::io::Error;
 
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
@@ -17,25 +30,74 @@ impl<R: std::io::Read> Read for R {
     }
 }
 
+/// An error type returned by [`BufParse`](struct.BufParse.html).
 #[derive(Debug)]
-pub enum ParserError<'a> {
+pub enum BufParseError<'a> {
+    /// The input stream was not valid UTF-8.
     InvalidUtf8(Utf8Error),
-    InvalidSyntax(Error<'a>),
+    /// There was a syntax error in the input stream.
+    InvalidSyntax(SyntaxError<'a>),
 }
 
-impl<'a> From<Utf8Error> for ParserError<'a> {
+impl fmt::Display for BufParseError<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BufParseError::InvalidUtf8(err) => write!(f, "invalid utf-8 in input: {}", err),
+            BufParseError::InvalidSyntax(err) => write!(f, "invalid syntax: {}", err),
+        }
+    }
+}
+
+impl<'a> From<Utf8Error> for BufParseError<'a> {
     fn from(err: Utf8Error) -> Self {
-        ParserError::InvalidUtf8(err)
+        BufParseError::InvalidUtf8(err)
     }
 }
 
-impl<'a> From<Error<'a>> for ParserError<'a> {
-    fn from(err: Error<'a>) -> Self {
-        ParserError::InvalidSyntax(err)
+impl<'a> From<SyntaxError<'a>> for BufParseError<'a> {
+    fn from(err: SyntaxError<'a>) -> Self {
+        BufParseError::InvalidSyntax(err)
     }
 }
 
-pub struct Parser<R> {
+#[cfg(feature = "std")]
+impl std::error::Error for BufParseError<'_> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            BufParseError::InvalidUtf8(err) => Some(err),
+            BufParseError::InvalidSyntax(_) => None,
+        }
+    }
+}
+
+/// A streaming control file parser that buffers input internally.
+///
+/// This type handles incrementally reading and buffering input from a source implementing the
+/// [`BufParseInput`](trait.BufParseInput.html) trait.
+///
+/// # Example
+/// ```
+/// # #[cfg(feature = "std")] {
+/// use debcontrol::{BufParse, Streaming};
+/// use std::fs::File;
+///
+/// # let file_name = format!("{}/tests/control", env!("CARGO_MANIFEST_DIR"));
+/// let f = File::open(file_name).unwrap();
+/// let mut buf_parse = BufParse::new(f, 4096);
+/// while let Some(result) = buf_parse.try_next().unwrap() {
+///     match result {
+///         Streaming::Item(paragraph) => {
+///             for field in paragraph.fields {
+///                 println!("{}: {}", field.name, &field.value);
+///             }
+///         }
+///         Streaming::Incomplete => buf_parse.buffer().unwrap()
+///     }
+/// }
+/// # }
+/// ```
+#[derive(Debug)]
+pub struct BufParse<R> {
     chunk_size: usize,
     buffer: Vec<u8>,
     pos: usize,
@@ -43,9 +105,10 @@ pub struct Parser<R> {
     exhausted: bool,
 }
 
-impl<R: Read> Parser<R> {
+impl<R: BufParseInput> BufParse<R> {
+    /// Create a new parser.
     pub fn new(read: R, chunk_size: usize) -> Self {
-        Parser {
+        BufParse {
             chunk_size,
             buffer: Vec::with_capacity(chunk_size),
             pos: 0,
@@ -54,7 +117,8 @@ impl<R: Read> Parser<R> {
         }
     }
 
-    pub fn advance(&mut self) -> Result<(), R::Error> {
+    /// Read the next chunk of input into the buffer.
+    pub fn buffer(&mut self) -> Result<(), R::Error> {
         self.buffer.drain(..self.pos);
         self.pos = 0;
 
@@ -70,7 +134,18 @@ impl<R: Read> Parser<R> {
         Ok(())
     }
 
-    pub fn parse(&mut self) -> Result<Option<Streaming<Paragraph>>, ParserError> {
+    /// Try to parse the next paragraph from the input.
+    ///
+    /// A syntax error encountered during parsing is returned immediately. Otherwise, the nature of
+    /// the `Ok` result determines what to do next:
+    ///
+    /// * If it's `None`, all input has been parsed. Future calls will continue to return `None`.
+    /// * If it's [`Streaming::Incomplete`](enum.Streaming.html#variant.Incomplete), there's not
+    ///   enough buffered input to make a parsing decision. Call
+    ///   [`buffer`](struct.BufParse.html#method.buffer) to read more input.
+    /// * If it's [`Streaming::Item`](enum.Streaming.html#variant.Item), a paragraph was parsed.
+    ///   Call `try_next` again after processing it.
+    pub fn try_next(&mut self) -> Result<Option<Streaming<Paragraph>>, BufParseError> {
         let input = Self::from_utf8(&self.buffer[self.pos..])?;
 
         match parse_streaming(input)? {
@@ -118,7 +193,7 @@ mod tests {
         }
     }
 
-    impl<'a> Read for Bytes<'a> {
+    impl<'a> BufParseInput for Bytes<'a> {
         type Error = ();
 
         fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
@@ -142,10 +217,10 @@ mod tests {
             )
             .as_bytes(),
         );
-        let mut parser = Parser::new(input, chunk_size);
+        let mut parser = BufParse::new(input, chunk_size);
 
         let mut fields = vec![];
-        while let Some(result) = parser.parse().unwrap() {
+        while let Some(result) = parser.try_next().unwrap() {
             match result {
                 Streaming::Item(paragraph) => {
                     fields.extend(
@@ -155,7 +230,7 @@ mod tests {
                             .map(|field| (field.name.to_string(), field.value)),
                     );
                 }
-                Streaming::Incomplete => parser.advance().unwrap(),
+                Streaming::Incomplete => parser.buffer().unwrap(),
             }
         }
 

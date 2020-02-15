@@ -1,4 +1,4 @@
-use debcontrol::{parse_str, Parser, Read, Streaming};
+use debcontrol::{parse_str, BufParse, BufParseInput, Streaming};
 use std::{
     fs::{read_to_string, File},
     io::Read as IoRead,
@@ -43,7 +43,7 @@ fn should_parse_control_file() {
 
 struct FileWrapper(File);
 
-impl Read for FileWrapper {
+impl BufParseInput for FileWrapper {
     type Error = std::io::Error;
 
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
@@ -54,10 +54,10 @@ impl Read for FileWrapper {
 #[test]
 fn should_parse_control_file_streaming() {
     let read = FileWrapper(File::open(data_file()).unwrap());
-    let mut parser = Parser::new(read, 64);
+    let mut parser = BufParse::new(read, 64);
 
     let mut package_names: Vec<String> = Vec::new();
-    while let Some(result) = parser.parse().unwrap() {
+    while let Some(result) = parser.try_next().unwrap() {
         match result {
             Streaming::Item(paragraph) => {
                 let maybe_field = paragraph.fields.into_iter().find(|f| f.name == "Package");
@@ -66,7 +66,7 @@ fn should_parse_control_file_streaming() {
                 }
             }
             Streaming::Incomplete => {
-                parser.advance().unwrap();
+                parser.buffer().unwrap();
             }
         }
     }
