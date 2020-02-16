@@ -178,7 +178,11 @@ impl<R: BufParseInput> BufParse<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::{string::ToString, vec};
+    use alloc::{
+        string::{String, ToString},
+        vec,
+    };
+    use assert_matches::assert_matches;
     use core::cmp::min;
     use indoc::indoc;
 
@@ -204,21 +208,8 @@ mod tests {
         }
     }
 
-    fn parse_utf8_input(chunk_size: usize) {
-        let input = Bytes::new(
-            indoc!(
-                "
-                field: äöüß
-                field: value
-                 cont
-    
-                field: ßäöü
-                "
-            )
-            .as_bytes(),
-        );
-        let mut parser = BufParse::new(input, chunk_size);
-
+    fn parse_input(input: &[u8], chunk_size: usize) -> Vec<(String, String)> {
+        let mut parser = BufParse::new(Bytes::new(input), chunk_size);
         let mut fields = vec![];
         while let Some(result) = parser.try_next().unwrap() {
             match result {
@@ -233,34 +224,85 @@ mod tests {
                 Streaming::Incomplete => parser.buffer().unwrap(),
             }
         }
+        fields
+    }
 
+    #[test]
+    fn should_parse_input_in_a_single_chunk() {
+        let result = parse_input(
+            indoc!(
+                "field: value
+                another-field: value"
+            )
+            .as_bytes(),
+            1000,
+        );
         assert_eq!(
-            fields,
+            result,
             vec![
-                ("field".to_string(), "äöüß".to_string()),
-                ("field".to_string(), "value\ncont".to_string()),
-                ("field".to_string(), "ßäöü".to_string()),
+                ("field".to_string(), "value".to_string()),
+                ("another-field".to_string(), "value".to_string())
             ]
         );
     }
 
     #[test]
-    fn should_parse_file_with_chunk_size_1() {
-        parse_utf8_input(1);
+    fn should_handle_partial_utf8_on_chunk_border() {
+        let result = parse_input("12345:äöüöäüääöüäöäüöüöä".as_bytes(), 7);
+        assert_eq!(
+            result,
+            vec![("12345".to_string(), "äöüöäüääöüäöäüöüöä".to_string())]
+        );
     }
 
     #[test]
-    fn should_parse_file_with_chunk_size_2() {
-        parse_utf8_input(2);
+    fn should_need_to_buffer_at_least_twice_for_nonempty_input() {
+        let mut parse = BufParse::new(Bytes::new(b"a: b"), 100);
+        parse.buffer().unwrap();
+        assert_matches!(parse.try_next(), Ok(Some(Streaming::Incomplete)));
+        parse.buffer().unwrap();
+        assert_matches!(parse.try_next(), Ok(Some(Streaming::Item(_))));
+        assert_matches!(parse.try_next(), Ok(None));
     }
 
     #[test]
-    fn should_parse_file_with_chunk_size_10() {
-        parse_utf8_input(10);
+    fn should_keep_returning_none_when_input_is_exhausted() {
+        let mut parse = BufParse::new(Bytes::new(b""), 10);
+        parse.buffer().unwrap();
+        assert_matches!(parse.try_next(), Ok(None));
+        assert_matches!(parse.try_next(), Ok(None));
+        assert_matches!(parse.try_next(), Ok(None));
     }
 
     #[test]
-    fn should_parse_file_with_chunk_size_1000() {
-        parse_utf8_input(1000);
+    fn should_fail_on_invalid_utf8_inside_chunk() {
+        let mut parse = BufParse::new(Bytes::new(b"abc: a\xe2\x82\x28bcd efgh"), 100);
+        parse.buffer().unwrap();
+        assert_matches!(parse.try_next(), Ok(Some(Streaming::Incomplete)));
+        parse.buffer().unwrap();
+        assert_matches!(parse.try_next(), Err(BufParseError::InvalidUtf8(_)));
+        assert_matches!(parse.try_next(), Err(BufParseError::InvalidUtf8(_)));
+    }
+
+    #[test]
+    fn should_fail_on_invalid_utf8_on_chunk_border() {
+        let mut parse = BufParse::new(Bytes::new(b"abc: ab\xe2\x82\x28bcd efgh"), 7);
+        parse.buffer().unwrap();
+        assert_matches!(parse.try_next(), Ok(Some(Streaming::Incomplete)));
+        parse.buffer().unwrap();
+        assert_matches!(parse.try_next(), Ok(Some(Streaming::Incomplete)));
+        parse.buffer().unwrap();
+        assert_matches!(parse.try_next(), Ok(Some(Streaming::Incomplete)));
+        parse.buffer().unwrap();
+        assert_matches!(parse.try_next(), Err(BufParseError::InvalidUtf8(_)));
+    }
+
+    #[test]
+    fn should_fail_on_trailing_invalid_utf8() {
+        let mut parse = BufParse::new(Bytes::new(b"abc: a\xe2\x82\x28"), 100);
+        parse.buffer().unwrap();
+        assert_matches!(parse.try_next(), Ok(Some(Streaming::Incomplete)));
+        parse.buffer().unwrap();
+        assert_matches!(parse.try_next(), Err(BufParseError::InvalidUtf8(_)));
     }
 }
