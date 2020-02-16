@@ -1,4 +1,4 @@
-# debcontrol -- parse Debian control files
+# `debcontrol` — parse Debian control files
 
 [![pipeline status](https://gitlab.com/fkrull/debcontrol-rs/badges/master/pipeline.svg)](https://gitlab.com/fkrull/debcontrol-rs/-/commits/master)
 [![crates.io version](https://img.shields.io/crates/v/debcontrol.svg)](https://crates.io/crates/debcontrol)
