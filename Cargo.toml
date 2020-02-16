@@ -3,6 +3,10 @@ name = "debcontrol"
 version = "0.1.0"
 authors = ["Felix Krull <f_krull@gmx.de>"]
 edition = "2018"
+description = "Parse Debian control files"
+keywords = ["deb", "debian", "control", "dpkg"]
+license = "MIT"
+readme = "README.md"
 
 [features]
 std = ["nom/std"]
