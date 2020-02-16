@@ -99,7 +99,7 @@ impl std::error::Error for BufParseError<'_> {
 #[derive(Debug)]
 pub struct BufParse<R> {
     chunk_size: usize,
-    buffer: Vec<u8>,
+    buf: Vec<u8>,
     pos: usize,
     read: R,
     exhausted: bool,
@@ -110,7 +110,7 @@ impl<R: BufParseInput> BufParse<R> {
     pub fn new(read: R, chunk_size: usize) -> Self {
         BufParse {
             chunk_size,
-            buffer: Vec::with_capacity(chunk_size),
+            buf: Vec::with_capacity(chunk_size),
             pos: 0,
             read,
             exhausted: false,
@@ -119,13 +119,18 @@ impl<R: BufParseInput> BufParse<R> {
 
     /// Read the next chunk of input into the buffer.
     pub fn buffer(&mut self) -> Result<(), R::Error> {
-        self.buffer.drain(..self.pos);
-        self.pos = 0;
+        let size = self.chunk_size;
 
-        let end = self.buffer.len();
-        self.buffer.resize(end + self.chunk_size, 0);
-        let read = self.read.read(&mut self.buffer[end..])?;
-        self.buffer.truncate(end + read);
+        // Don't drain leading data if we can append the chunk without reallocating.
+        if self.buf.capacity() - self.buf.len() < size {
+            self.buf.drain(..self.pos);
+            self.pos = 0;
+        }
+
+        let end = self.buf.len();
+        self.buf.resize(end + size, 0);
+        let read = self.read.read(&mut self.buf[end..])?;
+        self.buf.truncate(end + read);
 
         if read == 0 {
             self.exhausted = true;
@@ -146,7 +151,7 @@ impl<R: BufParseInput> BufParse<R> {
     /// * If it's [`Streaming::Item`](enum.Streaming.html#variant.Item), a paragraph was parsed.
     ///   Call `try_next` again after processing it.
     pub fn try_next(&mut self) -> Result<Option<Streaming<Paragraph>>, BufParseError> {
-        let input = Self::from_utf8(&self.buffer[self.pos..])?;
+        let input = self.as_longest_utf8(&self.buf)?; //Self::from_utf8(&self.buf[self.pos..])?;
 
         match parse_streaming(input)? {
             Streaming::Item((rest, paragraph)) => {
@@ -156,7 +161,7 @@ impl<R: BufParseInput> BufParse<R> {
             }
             Streaming::Incomplete => {
                 if self.exhausted {
-                    let input = from_utf8(&self.buffer[self.pos..])?;
+                    let input = self.as_utf8(&self.buf)?; //from_utf8(&self.buf[self.pos..])?;
                     let result = parse_finish(input)?;
                     self.pos += input.len();
                     Ok(result.map(Streaming::Item))
@@ -167,11 +172,20 @@ impl<R: BufParseInput> BufParse<R> {
         }
     }
 
-    fn from_utf8(bytes: &[u8]) -> Result<&str, Utf8Error> {
-        from_utf8(bytes).or_else(|err| {
-            let longest_valid = err.valid_up_to();
-            from_utf8(&bytes[..longest_valid])
+    /// Return the longest valid UTF-8 substring.
+    fn as_longest_utf8<'a>(&'_ self, buf: &'a [u8]) -> Result<&'a str, Utf8Error> {
+        self.as_utf8(buf).or_else(|err| match err.error_len() {
+            Some(_) => Err(err),
+            None => {
+                let valid = &buf[self.pos..err.valid_up_to()];
+                from_utf8(valid)
+            }
         })
+    }
+
+    /// Return the entire buffer as a str slice.
+    fn as_utf8<'a>(&'_ self, buf: &'a [u8]) -> Result<&'a str, Utf8Error> {
+        from_utf8(&buf[self.pos..])
     }
 }
 
@@ -278,19 +292,13 @@ mod tests {
     fn should_fail_on_invalid_utf8_inside_chunk() {
         let mut parse = BufParse::new(Bytes::new(b"abc: a\xe2\x82\x28bcd efgh"), 100);
         parse.buffer().unwrap();
-        assert_matches!(parse.try_next(), Ok(Some(Streaming::Incomplete)));
-        parse.buffer().unwrap();
         assert_matches!(parse.try_next(), Err(BufParseError::InvalidUtf8(_)));
         assert_matches!(parse.try_next(), Err(BufParseError::InvalidUtf8(_)));
     }
 
     #[test]
     fn should_fail_on_invalid_utf8_on_chunk_border() {
-        let mut parse = BufParse::new(Bytes::new(b"abc: ab\xe2\x82\x28bcd efgh"), 7);
-        parse.buffer().unwrap();
-        assert_matches!(parse.try_next(), Ok(Some(Streaming::Incomplete)));
-        parse.buffer().unwrap();
-        assert_matches!(parse.try_next(), Ok(Some(Streaming::Incomplete)));
+        let mut parse = BufParse::new(Bytes::new(b"abc: ab\xe2\x82\x28bcd efgh"), 8);
         parse.buffer().unwrap();
         assert_matches!(parse.try_next(), Ok(Some(Streaming::Incomplete)));
         parse.buffer().unwrap();
@@ -300,6 +308,13 @@ mod tests {
     #[test]
     fn should_fail_on_trailing_invalid_utf8() {
         let mut parse = BufParse::new(Bytes::new(b"abc: a\xe2\x82\x28"), 100);
+        parse.buffer().unwrap();
+        assert_matches!(parse.try_next(), Err(BufParseError::InvalidUtf8(_)));
+    }
+
+    #[test]
+    fn should_fail_on_trailing_partial_utf8() {
+        let mut parse = BufParse::new(Bytes::new(b"abc: a\xe2\x82"), 100);
         parse.buffer().unwrap();
         assert_matches!(parse.try_next(), Ok(Some(Streaming::Incomplete)));
         parse.buffer().unwrap();
