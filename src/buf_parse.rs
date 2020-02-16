@@ -22,7 +22,7 @@ pub trait BufParseInput {
 }
 
 #[cfg(feature = "std")]
-impl<R: std::io::Read> BufParseInput for R {
+impl<R: std::io::Read + ?Sized> BufParseInput for R {
     type Error = std::io::Error;
 
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
