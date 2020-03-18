@@ -172,6 +172,13 @@ impl<R: BufParseInput> BufParse<R> {
         }
     }
 
+    /// Consume this `BufParse` and return the wrapped input source.
+    ///
+    /// Any input that was already buffered will be lost.
+    pub fn into_inner(self) -> R {
+        self.read
+    }
+
     /// Return the longest valid UTF-8 substring.
     fn as_longest_utf8<'a>(&'_ self, buf: &'a [u8]) -> Result<&'a str, Utf8Error> {
         self.as_utf8(buf).or_else(|err| match err.error_len() {
@@ -200,6 +207,7 @@ mod tests {
     use core::cmp::min;
     use indoc::indoc;
 
+    #[derive(Debug, PartialEq, Eq, Clone)]
     struct Bytes<'a> {
         bytes: &'a [u8],
         pos: usize,
@@ -319,5 +327,13 @@ mod tests {
         assert_matches!(parse.try_next(), Ok(Some(Streaming::Incomplete)));
         parse.buffer().unwrap();
         assert_matches!(parse.try_next(), Err(BufParseError::InvalidUtf8(_)));
+    }
+
+    #[test]
+    fn should_return_inner() {
+        let input = Bytes::new(b"abcd");
+        let parse = BufParse::new(input.clone(), 100);
+        let inner = parse.into_inner();
+        assert_eq!(inner, input);
     }
 }
