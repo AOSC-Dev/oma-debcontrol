@@ -3,8 +3,8 @@ image: rust
 variables:
   SCCACHE_URL: https://github.com/mozilla/sccache/releases/download/0.2.12/sccache-0.2.12-x86_64-unknown-linux-musl.tar.gz
   CARGO_TARGET_DIR: ${CI_PROJECT_DIR}/target
-  CARGO_HOME: ${CI_PROJECT_DIR}/../cargo
-  SCCACHE_DIR: ${CI_PROJECT_DIR}/../sccache
+  CARGO_HOME: ${CI_PROJECT_DIR}/cargo
+  SCCACHE_DIR: ${CI_PROJECT_DIR}/sccache
   RUSTC_WRAPPER: sccache
 
 before_script:
@@ -14,8 +14,8 @@ before_script:
 
 cache:
   paths:
-    - ../cargo/
-    - ../sccache/
+    - cargo/
+    - sccache/
 
 stages:
   - build
