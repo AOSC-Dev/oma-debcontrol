@@ -121,7 +121,7 @@ impl<R: BufParseInput> BufParse<R> {
     pub fn buffer(&mut self) -> Result<(), R::Error> {
         let size = self.chunk_size;
 
-        // Don't drain leading data if we can append the chunk without reallocating.
+        // Only drain leading data if we can't append the chunk without reallocating.
         if self.buf.capacity() - self.buf.len() < size {
             self.buf.drain(..self.pos);
             self.pos = 0;
@@ -151,7 +151,7 @@ impl<R: BufParseInput> BufParse<R> {
     /// * If it's [`Streaming::Item`](enum.Streaming.html#variant.Item), a paragraph was parsed.
     ///   Call `try_next` again after processing it.
     pub fn try_next(&mut self) -> Result<Option<Streaming<Paragraph>>, BufParseError> {
-        let input = self.as_longest_utf8(&self.buf)?; //Self::from_utf8(&self.buf[self.pos..])?;
+        let input = self.as_longest_utf8(&self.buf)?;
 
         match parse_streaming(input)? {
             Streaming::Item((rest, paragraph)) => {
@@ -161,7 +161,7 @@ impl<R: BufParseInput> BufParse<R> {
             }
             Streaming::Incomplete => {
                 if self.exhausted {
-                    let input = self.as_utf8(&self.buf)?; //from_utf8(&self.buf[self.pos..])?;
+                    let input = self.as_utf8(&self.buf)?;
                     let result = parse_finish(input)?;
                     self.pos += input.len();
                     Ok(result.map(Streaming::Item))
@@ -184,7 +184,7 @@ impl<R: BufParseInput> BufParse<R> {
         self.as_utf8(buf).or_else(|err| match err.error_len() {
             Some(_) => Err(err),
             None => {
-                let valid = &buf[self.pos..err.valid_up_to()];
+                let valid = &buf[self.pos..self.pos + err.valid_up_to()];
                 from_utf8(valid)
             }
         })
@@ -269,11 +269,23 @@ mod tests {
     }
 
     #[test]
-    fn should_handle_partial_utf8_on_chunk_border() {
+    fn should_handle_partial_utf8_on_chunk_boundary() {
         let result = parse_input("12345:äöüöäüääöüäöäüöüöä".as_bytes(), 7);
         assert_eq!(
             result,
             vec![("12345".to_string(), "äöüöäüääöüäöäüöüöä".to_string())]
+        );
+    }
+
+    #[test]
+    fn should_handle_partial_utf8_after_advancing_position() {
+        let result = parse_input("1:2\n\n3:äöü".as_bytes(), 8);
+        assert_eq!(
+            result,
+            vec![
+                ("1".to_string(), "2".to_string()),
+                ("3".to_string(), "äöü".to_string()),
+            ]
         );
     }
 
