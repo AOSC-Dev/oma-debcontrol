@@ -1,6 +1,6 @@
 [package]
 name = "debcontrol"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Felix Krull <f_krull@gmx.de>"]
 edition = "2018"
 description = "Parse Debian control files"
@@ -10,7 +10,7 @@ readme = "README.md"
 repository = "https://gitlab.com/fkrull/debcontrol-rs"
 
 [features]
-std = ["nom/std"]
+std = ["nom/std", "streamparser/std"]
 verbose-errors = []
 default = ["std", "verbose-errors"]
 
@@ -18,6 +18,11 @@ default = ["std", "verbose-errors"]
 version = "5.1.0"
 default-features = false
 features = ["alloc"]
+
+[dependencies.streamparser]
+version = "0.1.0"
+default-features = false
+features = ["nom-adapters"]
 
 [dev-dependencies]
 anyhow = "1.0.26"

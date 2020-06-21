@@ -56,6 +56,9 @@ extern crate alloc;
 
 use alloc::{string::String, vec::Vec};
 use core::fmt;
+use streamparser::{nom::nom_finish, nom::nom_stream};
+
+pub use streamparser::{Parsed, Streaming};
 
 mod buf_parse;
 mod parser;
@@ -133,15 +136,6 @@ impl<'a> fmt::Display for SyntaxError<'a> {
 #[cfg(feature = "std")]
 impl<'a> std::error::Error for SyntaxError<'a> {}
 
-/// A return value from the streaming parser.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Streaming<T> {
-    /// An item returned from the parser.
-    Item(T),
-    /// More input is needed to make a parsing decision.
-    Incomplete,
-}
-
 /// Attempt to parse a paragraph from the given input.
 ///
 /// This function returns a paragraph and any remaining input if a paragraph can be unambiguously
@@ -153,13 +147,21 @@ pub enum Streaming<T> {
 /// * if there's no more data in the source, call [`parse_finish`](fn.parse_finish.html) with all
 ///   remaining input.
 pub fn parse_streaming(input: &str) -> Result<Streaming<(&str, Paragraph)>, SyntaxError> {
-    match parser::streaming::paragraph::<ErrorType>(input) {
-        Ok((remaining, Some(item))) => Ok(Streaming::Item((remaining, item))),
+    nom_stream(parser::streaming::paragraph::<ErrorType>)(input)
+        .map(|parsed| match parsed {
+            Streaming::Item((Some(item), consumed)) => Streaming::Item((&input[consumed..], item)),
+            Streaming::Item((None, _)) => Streaming::Incomplete,
+            Streaming::Incomplete => Streaming::Incomplete,
+        })
+        .map_err(|underlying| SyntaxError { input, underlying })
+
+    /*match parser::streaming::paragraph::<ErrorType>(input) {
+        Ok((remaining, Some(item))) => Ok(Streaming::Item((Some(item), remaining))),
         Ok((_, None)) => Ok(Streaming::Incomplete),
         Err(nom::Err::Incomplete(_)) => Ok(Streaming::Incomplete),
         Err(nom::Err::Error(underlying)) => Err(SyntaxError { input, underlying }),
         Err(nom::Err::Failure(underlying)) => Err(SyntaxError { input, underlying }),
-    }
+    }*/
 }
 
 /// Finish parsing the streaming input and return the final remaining paragraph, if any.
@@ -170,12 +172,16 @@ pub fn parse_streaming(input: &str) -> Result<Streaming<(&str, Paragraph)>, Synt
 /// input to parse the final remaining paragraph. If the remaining input is only whitespace and
 /// comments, `None` is returned.
 pub fn parse_finish(input: &str) -> Result<Option<Paragraph>, SyntaxError> {
-    match parser::complete::paragraph::<ErrorType>(input) {
+    nom_finish(parser::complete::paragraph::<ErrorType>)(input)
+        .map(|x| x.0)
+        .map_err(|underlying| SyntaxError { input, underlying })
+
+    /*match parser::complete::paragraph::<ErrorType>(input) {
         Ok((_, item)) => Ok(item),
         Err(nom::Err::Error(underlying)) => Err(SyntaxError { input, underlying }),
         Err(nom::Err::Failure(underlying)) => Err(SyntaxError { input, underlying }),
         Err(nom::Err::Incomplete(_)) => unimplemented!(),
-    }
+    }*/
 }
 
 /// Parse the given complete control file into paragraphs.
