@@ -15,7 +15,7 @@ verbose-errors = []
 default = ["std", "verbose-errors"]
 
 [dependencies.nom]
-version = "5.1.0"
+version = "7.1"
 default-features = false
 features = ["alloc"]
 

@@ -197,7 +197,7 @@ macro_rules! parsers {
             /// and all continuation lines are concatenated with newline characters.
             fn field_definition<'a, E>(input: &'a str) -> IResult<&'a str, Field<'a>, E>
             where
-                E: ParseError<&'a str>,
+                E: ParseError<&'a str> + nom::error::ContextError<&'a str>,
             {
                 context(
                     "field definition",
@@ -218,7 +218,7 @@ macro_rules! parsers {
             /// EOF.
             pub(crate) fn paragraph<'a, E>(input: &'a str) -> IResult<&'a str, Option<Paragraph>, E>
             where
-                E: ParseError<&'a str>,
+                E: ParseError<&'a str> + nom::error::ContextError<&'a str>,
             {
                 preceded(
                     many0_count(alt((blank_line, comment_line))),
