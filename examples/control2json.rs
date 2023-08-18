@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context};
-use debcontrol::{parse_str, Paragraph};
+use oma_debcontrol::{parse_str, Paragraph};
 use json::JsonValue;
 use std::{env::args_os, fs::read_to_string, io::stdout, path::PathBuf};
 

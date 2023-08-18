@@ -1,4 +1,4 @@
-use debcontrol::{parse_str, BufParse, BufParseInput, Streaming};
+use oma_debcontrol::{parse_str, BufParse, BufParseInput, Streaming};
 use std::{
     fs::{read_to_string, File},
     io::Read as IoRead,

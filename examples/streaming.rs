@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use debcontrol::{BufParse, Paragraph, Streaming};
+use oma_debcontrol::{BufParse, Paragraph, Streaming};
 use std::{
     env::args_os,
     ffi::OsString,
