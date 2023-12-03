@@ -1,6 +1,6 @@
 [package]
 name = "oma-debcontrol"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Felix Krull <f_krull@gmx.de>"]
 edition = "2018"
 description = "Parse Debian control files"

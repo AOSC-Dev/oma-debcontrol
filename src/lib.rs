@@ -104,9 +104,9 @@ type ErrorType<'a> = nom::error::VerboseError<&'a str>;
 #[derive(Debug)]
 pub struct SyntaxError<'a> {
     /// The parser input that caused the error.
-    input: &'a str,
+    pub input: &'a str,
     /// The underlying nom error.
-    underlying: ErrorType<'a>,
+    pub underlying: ErrorType<'a>,
 }
 
 impl<'a> fmt::Display for SyntaxError<'a> {
